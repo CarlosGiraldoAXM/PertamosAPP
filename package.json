@@ -10,7 +10,8 @@
     "db:start": "supabase start",
     "db:reset": "supabase db reset",
     "db:test": "supabase test db",
-    "db:lint": "supabase db lint --level warning"
+    "db:lint": "supabase db lint --level warning",
+    "crear-admin": "node scripts/crear-admin.mjs"
   },
   "devDependencies": {
     "supabase": "^2.117.0",
