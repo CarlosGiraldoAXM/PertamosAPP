@@ -3,9 +3,12 @@
   "private": true,
   "workspaces": [
     "packages/*",
+    "apps/*",
     "tests/*"
   ],
   "scripts": {
+    "dev": "npm run dev -w @prestamos/web",
+    "build": "npm run build -w @prestamos/web",
     "test": "npm run test --workspaces --if-present",
     "test:integracion": "npm run test:integracion -w @prestamos/integracion",
     "typecheck": "npm run typecheck --workspaces --if-present",
@@ -13,7 +16,8 @@
     "db:reset": "supabase db reset",
     "db:test": "supabase test db",
     "db:lint": "supabase db lint --level warning",
-    "crear-admin": "node scripts/crear-admin.mjs"
+    "crear-admin": "node scripts/crear-admin.mjs",
+    "test:e2e": "npm run test:e2e -w @prestamos/integracion"
   },
   "devDependencies": {
     "supabase": "^2.117.0",

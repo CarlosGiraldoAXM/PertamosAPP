@@ -269,7 +269,12 @@ Detalles de implementación (`supabase/functions/_shared`):
 
 ## 11. UI
 
-Mobile-first. Clientes · Nuevo préstamo (preview en vivo + validación de la suma de tasas de socios) · Detalle del préstamo · Registrar pago (muestra la imputación antes de confirmar) · Dashboard.
+Mobile-first (apps/web, React + Vite + Tailwind). Pantallas: Inicio (atrasados, cortes de la semana, cartera, tarjeta por socio) · Clientes (búsqueda, alta, edición) · Préstamos (filtros) · Nuevo préstamo (plan en vivo, suma de tasas y aportes de socios) · Detalle (saldo, vencido, próximo corte, socios, pagos, meses) · Registrar pago y Cancelar todo (imputación calculada con core antes de confirmar) · Cuenta (socios, clave, vincular Google).
+
+- Las lecturas pasan por RLS y se paginan de a 1.000 filas (max_rows): un libro truncado daría saldos falsos.
+- El primer ingreso obliga a cambiar la clave (usuarios.debe_cambiar_clave).
+- Usuarios de consulta no ven botones de escritura (y la base igual lo impide).
+- Pendiente: subir soportes (fotos de cédula/comprobantes) al bucket soportes.
 
 Moneda: `$ 1.250.000`. Donde haya cuota redondeada se muestra al lado la exacta, ej. **$ 38.000** (exacta $ 37.037).
 

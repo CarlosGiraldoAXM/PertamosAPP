@@ -4,9 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test:integracion": "vitest run"
+    "test:integracion": "vitest run",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "postgres": "^3.4.7"
   }
 }
