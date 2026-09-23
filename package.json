@@ -2,10 +2,12 @@
   "name": "prestamos",
   "private": true,
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "tests/*"
   ],
   "scripts": {
     "test": "npm run test --workspaces --if-present",
+    "test:integracion": "npm run test:integracion -w @prestamos/integracion",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "db:start": "supabase start",
     "db:reset": "supabase db reset",

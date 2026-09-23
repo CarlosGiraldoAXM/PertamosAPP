@@ -30,8 +30,8 @@ reset role;
 
 -- ---------------------------------------------------------------- consulta
 select pg_temp.como(:consulta);
-select is((select count(*)::int from public.clientes), 1, 'consulta lee clientes');
-select is((select count(*)::int from public.prestamo_socios), 2, 'consulta lee los socios del préstamo');
+select is((select count(*)::int from public.clientes where documento = '1000000001'), 1, 'consulta lee clientes');
+select is((select count(*)::int from public.prestamo_socios where prestamo_id = :prestamo), 2, 'consulta lee los socios del préstamo');
 select is((select count(*)::int from public.usuarios), 1, 'consulta solo se ve a sí mismo en usuarios');
 select throws_ok(
   $$insert into public.clientes (nombre) values ('Intruso')$$,

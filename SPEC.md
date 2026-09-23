@@ -247,10 +247,18 @@ QUE DEBO HACER PARA LA BASE DE DATOS DE SUPABASE??,
 
 Una por operación, cada una en transacción con `FOR UPDATE` sobre el préstamo, devolviendo el `EstadoFinanciero` actualizado:
 
-- `crear-prestamo` — valida socios (sumas), inserta préstamo + socios.
-- `registrar-pago` — imputa con `aplicarPago`, inserta `pagos` + `aplicaciones` + `reparto_socios`.
-- `liquidar-prestamo` — cotiza y ejecuta la cancelación total; marca `pagado`.
-- `reversar-pago` — solo el último movimiento; inserta el reverso espejo.
+- `crear-prestamo` — valida socios (sumas), inserta préstamo + socios; devuelve plan y estado.
+- `registrar-pago` — imputa con `aplicarPago`, inserta `pagos` + `aplicaciones` + `reparto_socios`. `simular: true` devuelve la imputación sin guardar (para mostrarla antes de confirmar).
+- `liquidar-prestamo` — `simular: true` cotiza; para ejecutar exige `montoCotizado`. Marca `pagado`.
+- `reversar-pago` — solo el último movimiento; inserta el reverso espejo. Si reabre un préstamo pagado, vuelve a `activo`.
+
+Detalles de implementación (`supabase/functions/_shared`):
+- **Sesión:** `verify_jwt = false` en el gateway; cada función valida el token contra `/auth/v1/user` y el rol contra `public.usuarios` dentro de la transacción. Funciona igual con claves nuevas y legacy.
+- **Conexión:** `postgres.js` con `SUPABASE_DB_URL` (en local, `PRESTAMOS_DB_URL`, porque el resolvedor de Deno rechaza el guion bajo del host que inyecta la CLI). `bigint` se lee como `number` validado y `date` como string `YYYY-MM-DD`.
+- **Orden del libro:** `pagos.secuencia` (identity) — `created_at` puede empatar.
+- **"Hoy"** se calcula en `America/Bogota` en la función y entra a `core` como parámetro.
+- **Errores:** `400 ENTRADA_INVALIDA`, `401 NO_AUTENTICADO`, `403 SIN_PERMISO`, `404`, `422 <codigo de core>`, `409 INVARIANTE_VIOLADA` (la base rechazó algo que core dejó pasar: es un bug), `500`.
+- **Concurrencia:** hay un test de integración que retiene el bloqueo del préstamo desde otra transacción, registra un pago y verifica que la función lo ve. Sin `FOR UPDATE` ese test falla con un doble cobro del mismo mes, que las invariantes de la base no detectan porque cada asiento cuadra por separado.
 
 ## 10. Reportes
 

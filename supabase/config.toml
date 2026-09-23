@@ -383,8 +383,11 @@ inspector_port = 8083
 # The Deno major version to use.
 deno_version = 2
 
-# [edge_runtime.secrets]
-# secret_key = "env(SECRET_VALUE)"
+# Solo local. El host que inyecta la CLI en SUPABASE_DB_URL (supabase_db_prestamos)
+# tiene guion bajo y el resolvedor DNS de Deno lo rechaza; este alias no.
+# Credenciales por defecto de la base local, no sirven en producción.
+[edge_runtime.secrets]
+PRESTAMOS_DB_URL = "postgresql://postgres:postgres@db.supabase.internal:5432/postgres"
 
 [analytics]
 enabled = true
@@ -415,3 +418,18 @@ enabled = true
 # formatted with uppercase keywords, indent 2, max width 180, trailing commas,
 # and column/key alignment. Set to "null" to emit raw, unformatted SQL.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":180,\"commaStyle\":\"trailing\"}"
+
+# Edge Functions que mueven plata. verify_jwt = false porque cada función valida
+# la sesión contra Auth y el rol contra public.usuarios (ver _shared/auth.ts);
+# así funcionan igual con las claves nuevas (sb_publishable/sb_secret) y las legacy.
+[functions.crear-prestamo]
+verify_jwt = false
+
+[functions.registrar-pago]
+verify_jwt = false
+
+[functions.liquidar-prestamo]
+verify_jwt = false
+
+[functions.reversar-pago]
+verify_jwt = false

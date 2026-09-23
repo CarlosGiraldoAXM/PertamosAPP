@@ -1,0 +1,12 @@
+{
+  "name": "@prestamos/integracion",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:integracion": "vitest run"
+  },
+  "devDependencies": {
+    "postgres": "^3.4.7"
+  }
+}
