@@ -9,6 +9,7 @@ import { api } from '../lib/api.ts';
 import { fechaCorta, pesos, porcentaje } from '../lib/formato.ts';
 import { hoyBogota } from '../lib/hoy.ts';
 import { Aviso, Boton, Campo, Cargando, Cuota, Etiqueta, Fila, Pantalla, Tarjeta } from '../ui/componentes.tsx';
+import { Medidor, TiraDeMeses, type EstadoMes } from '../ui/graficas.tsx';
 import { EtiquetaEstado } from './Prestamos.tsx';
 
 const TIPO: Record<PagoFila['tipo'], string> = { pago: 'Pago', liquidacion: 'Cancelación total', reverso: 'Reverso' };
@@ -84,6 +85,17 @@ export function PrestamoDetalle() {
             <Fila etiqueta="Debe de capital" fuerte>
               <span className="text-xl">{pesos(e.saldoCapital)}</span>
             </Fila>
+            <div className="mt-2 mb-3">
+              <Medidor
+                valor={e.capitalPagado}
+                total={p.prestamo.capital}
+                etiqueta={
+                  <>
+                    Ha devuelto <strong className="text-slate-900">{pesos(e.capitalPagado)}</strong> de {pesos(p.prestamo.capital)}
+                  </>
+                }
+              />
+            </div>
             {e.interesVencidoPendiente > 0 && (
               <Fila etiqueta={`Interés vencido (${e.periodosAtrasados} ${e.periodosAtrasados === 1 ? 'mes' : 'meses'}, ${e.diasAtraso} días)`}>
                 <span className="text-rose-700">{pesos(e.interesVencidoPendiente)}</span>
@@ -189,6 +201,15 @@ export function PrestamoDetalle() {
           </Tarjeta>
 
           <Tarjeta titulo="Meses">
+            <div className="mb-4">
+              <TiraDeMeses
+                meses={e.periodos.map((per) => {
+                  const estado: EstadoMes = per.pendiente === 0 ? 'pagado' : per.vencido ? 'vencido' : 'curso';
+                  const texto = estado === 'pagado' ? 'pagado' : estado === 'vencido' ? `debe ${pesos(per.pendiente)}` : 'en curso';
+                  return { numero: per.numero, estado, detalle: `Mes ${per.numero} (corta ${fechaCorta(per.fechaCorte)}): ${texto}` };
+                })}
+              />
+            </div>
             <div className="-my-2 divide-y divide-slate-100">
               {[...e.periodos].reverse().map((per) => (
                 <div key={per.numero} className="flex items-center justify-between gap-2 py-2 text-sm">

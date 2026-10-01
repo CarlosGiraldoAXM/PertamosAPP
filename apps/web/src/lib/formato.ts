@@ -47,3 +47,13 @@ export function fechaCorta(iso: string): string {
   const [a, m, d] = iso.split('-');
   return `${Number(d)} ${MESES[Number(m) - 1]} ${a}`;
 }
+
+/** '2026-03' → 'mar'. */
+export function mesCorto(mes: string): string {
+  return MESES[Number(mes.slice(5, 7)) - 1] ?? mes;
+}
+
+/** '2026-03' → 'mar 2026'. */
+export function mesLargo(mes: string): string {
+  return `${mesCorto(mes)} ${mes.slice(0, 4)}`;
+}

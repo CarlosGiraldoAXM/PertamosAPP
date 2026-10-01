@@ -182,6 +182,8 @@ Mobile-first (`apps/web/src`). Pantallas: Inicio (atrasados, cortes de la semana
 
 Moneda: `$ 1.250.000`. Donde haya cuota redondeada se muestra al lado la exacta, ej. **$ 38.000** (exacta $ 37.037).
 
+**Gráficas** (`src/ui/graficas.tsx`, SVG/HTML propios, sin librerías): cifra principal, columnas de interés cobrado por mes (se toca un mes para ver su valor), medidor del cobro del mes, barras partidas de cartera al día/atrasada y de capital por socio, y una tira con un cuadrito por mes en el detalle del préstamo. Reglas: el color nunca es el único canal (siempre hay texto o símbolo: verde y rojo no se distinguen con daltonismo), los valores exactos se ven sin tooltip, y cada gráfica tiene su equivalente en texto. La paleta se validó con el script de la guía de visualización sobre el blanco de las tarjetas.
+
 Pendiente: login, y subir soportes (fotos de cédula y comprobantes) a R2.
 
 ## 12. Comandos

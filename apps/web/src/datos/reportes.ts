@@ -32,6 +32,11 @@ export interface ResumenCartera {
   interesCobradoMes: number;
   interesVencido: number;
   interesMensualEsperado: number;
+  /** Interés cobrado en cada uno de los últimos 6 meses (el último es el mes en curso). */
+  interesPorMes: { mes: string; total: number }[];
+  /** Capital de préstamos activos sin interés vencido / con interés vencido. */
+  capitalAlDia: number;
+  capitalAtrasado: number;
   prestamosAtrasados: number;
   atrasados: PrestamoConEstado[];
   proximos: PrestamoConEstado[];
@@ -42,8 +47,18 @@ export function conEstado(p: PrestamoCompleto, hoy: string): PrestamoConEstado {
   return { ...p, estado: estadoPrestamo(p.prestamo, p.movimientos, hoy) };
 }
 
+/** Los `cantidad` meses 'YYYY-MM' que terminan en el mes de `hoy`, del más antiguo al más nuevo. */
+function ultimosMeses(hoy: string, cantidad: number): string[] {
+  const total = Number(hoy.slice(0, 4)) * 12 + Number(hoy.slice(5, 7)) - 1;
+  return Array.from({ length: cantidad }, (_, i) => {
+    const t = total - (cantidad - 1 - i);
+    return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, '0')}`;
+  });
+}
+
 export function resumirCartera(cartera: PrestamoCompleto[], socios: Socio[], hoy: string): ResumenCartera {
   const mes = hoy.slice(0, 7);
+  const porMes = new Map(ultimosMeses(hoy, 6).map((m) => [m, 0]));
   const enUnaSemana = sumarDias(hoy, 7);
   const lista = cartera.map((p) => conEstado(p, hoy));
   const activos = lista.filter((p) => p.fila.estado === 'activo');
@@ -61,6 +76,8 @@ export function resumirCartera(cartera: PrestamoCompleto[], socios: Socio[], hoy
     for (const m of analizarLibro(p.prestamo, p.movimientos).efectivos) {
       for (const a of m.aplicaciones) {
         if (m.fecha.startsWith(mes)) interesCobradoMes += a.aInteres;
+        const mesDelPago = m.fecha.slice(0, 7);
+        if (porMes.has(mesDelPago)) porMes.set(mesDelPago, porMes.get(mesDelPago)! + a.aInteres);
         for (const r of a.reparto) {
           const s = porSocio.get(r.socioId);
           if (!s) continue;
@@ -97,6 +114,9 @@ export function resumirCartera(cartera: PrestamoCompleto[], socios: Socio[], hoy
     interesCobradoMes,
     interesVencido: activos.reduce((s, p) => s + p.estado.interesVencidoPendiente, 0),
     interesMensualEsperado,
+    interesPorMes: [...porMes].map(([m, total]) => ({ mes: m, total })),
+    capitalAlDia: activos.filter((p) => p.estado.diasAtraso === 0).reduce((s, p) => s + p.estado.saldoCapital, 0),
+    capitalAtrasado: atrasados.reduce((s, p) => s + p.estado.saldoCapital, 0),
     prestamosAtrasados: atrasados.length,
     atrasados,
     proximos,

@@ -19,8 +19,12 @@ test('socios → cliente → préstamo con dos socios → pago → reverso → c
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Inicio' })).toBeVisible();
 
-  // Socios (la base de las pruebas arranca vacía)
-  await page.getByRole('link', { name: /Cuenta/ }).click();
+  // Con la base vacía, el Inicio guía los primeros pasos y lleva al primero pendiente.
+  await expect(page.getByText('Para empezar')).toBeVisible();
+  await page.getByRole('button', { name: 'Ir' }).click();
+
+  // Socios
+  await expect(page.getByRole('heading', { name: 'Cuenta' })).toBeVisible();
   await expect(page.getByText('Todavía no hay socios.')).toBeVisible();
   for (const nombre of ['Socio A', 'Socio B']) {
     await page.getByLabel('Nuevo socio').fill(nombre);
@@ -82,9 +86,11 @@ test('socios → cliente → préstamo con dos socios → pago → reverso → c
   await expect(page.getByText('Reversado')).toBeVisible();
   await expect(page.getByText('$ 1.000.000').first()).toBeVisible();
 
-  // Aparece como atrasado en Inicio y en Préstamos
+  // Aparece como atrasado en Inicio (ya con gráficas) y en Préstamos
   await page.getByRole('link', { name: /Inicio/ }).click();
+  await expect(page.getByText('Plata prestada hoy')).toBeVisible();
   await expect(page.getByRole('link', { name: /María Gómez/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /oct 2026: \$ 0/ })).toBeVisible();
   await page.getByRole('link', { name: /Préstamos/ }).click();
   await page.getByRole('link', { name: /María Gómez/ }).click();
 
