@@ -15,7 +15,7 @@ import { useNavigate, useParams } from 'react-router';
 import { cargarPrestamo } from '../datos/cartera.ts';
 import { conEstado } from '../datos/reportes.ts';
 import { useCarga } from '../datos/useCarga.ts';
-import { invocar } from '../lib/funciones.ts';
+import { api } from '../lib/api.ts';
 import { fechaCorta, leerPesos, pesos } from '../lib/formato.ts';
 import { hoyBogota } from '../lib/hoy.ts';
 import { Aviso, Boton, Campo, CampoPesos, Cargando, Cuota, Fila, Pantalla, Selector, Tarjeta } from '../ui/componentes.tsx';
@@ -86,7 +86,7 @@ export function RegistrarPago() {
     setEnviando(true);
     setError(null);
     try {
-      await invocar('registrar-pago', { prestamoId: id, fecha, monto: montoN, medio, nota: nota.trim() || null });
+      await api('POST', `/prestamos/${id}/pagos`, { fecha, monto: montoN, medio, nota: nota.trim() || null });
       navegar(`/prestamos/${id}`, { replace: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -96,7 +96,7 @@ export function RegistrarPago() {
 
   const e = p?.estado;
   return (
-    <Pantalla titulo="Registrar pago" subtitulo={p?.fila.clientes?.nombre} volver={`/prestamos/${id}`}>
+    <Pantalla titulo="Registrar pago" subtitulo={p?.fila.cliente_nombre} volver={`/prestamos/${id}`}>
       {carga.cargando && !p && <Cargando />}
       {carga.error && <Aviso>{carga.error}</Aviso>}
       {p && e && (
@@ -173,8 +173,7 @@ export function Liquidar() {
     setEnviando(true);
     setError(null);
     try {
-      await invocar('liquidar-prestamo', {
-        prestamoId: id,
+      await api('POST', `/prestamos/${id}/liquidacion`, {
         fecha,
         montoCotizado: cotizacion.total,
         medio,
@@ -188,7 +187,7 @@ export function Liquidar() {
   }
 
   return (
-    <Pantalla titulo="Cancelar todo" subtitulo={p?.fila.clientes?.nombre} volver={`/prestamos/${id}`}>
+    <Pantalla titulo="Cancelar todo" subtitulo={p?.fila.cliente_nombre} volver={`/prestamos/${id}`}>
       {carga.cargando && !p && <Cargando />}
       {carga.error && <Aviso>{carga.error}</Aviso>}
       {p && (

@@ -1,7 +1,7 @@
 # SPEC — Sistema de gestión de préstamos
 
 > Especificación viva. Reemplaza a `prompt-sistema-prestamos.md` en todo lo que contradiga.
-> Última actualización: 2026-09-22 (decisiones de negocio confirmadas, schema revisado).
+> Última actualización: 2026-10-01 (migración de Supabase a Cloudflare: Workers + D1; sin login en esta etapa).
 
 ---
 
@@ -15,32 +15,36 @@ Por ahora el sistema lo usa **una sola persona** (el socio administrador). El se
 
 ## 2. Stack
 
-- **Base de datos:** Supabase (Postgres) — fuente de verdad, incluyendo Auth, RLS y Storage. Región São Paulo.
-- **Backend:** Supabase Edge Functions (Deno) para toda operación que mueve plata.
-- **Frontend:** React + Vite + TypeScript + Tailwind, desplegado en Cloudflare Pages.
-- **Cliente de datos:** `supabase-js` para lecturas (protegidas por RLS); las escrituras de dinero van por Edge Function.
-- **Driver en Edge Functions:** `postgres.js` por Supavisor en **session mode** (transacciones interactivas reales).
-- **Tests:** Vitest.
-- **Migraciones:** Supabase CLI, versionadas en `/supabase/migrations`. Nunca cambios a mano desde el dashboard.
+Todo corre en **Cloudflare** (se migró desde Supabase el 2026-10-01).
+
+- **App + API:** un solo **Worker** con Workers Static Assets. Sirve la SPA y atiende `/api/*`.
+- **Base de datos:** **D1** (SQLite). Fuente de verdad.
+- **Frontend:** React + Vite + TypeScript + Tailwind. El plugin `@cloudflare/vite-plugin` corre el Worker y la D1 local dentro de `npm run dev`.
+- **Tests:** Vitest (motor), `@cloudflare/vitest-plugin` (Worker + D1 en el runtime real) y Playwright (navegador).
+- **Migraciones:** Wrangler, versionadas en `apps/web/migrations`. Nunca cambios a mano desde el dashboard.
+- **Archivos (pendiente):** R2 para fotos de cédulas y comprobantes.
 
 ```
-/packages/core        -> motor de cálculo, TypeScript puro, cero dependencias de runtime
-/supabase/migrations  -> schema versionado
-/supabase/functions   -> Edge Functions (importan /packages/core)
-/apps/web             -> React + Vite
+/packages/core         -> motor de cálculo, TypeScript puro, cero dependencias de runtime
+/apps/web/src          -> la app (React)
+/apps/web/worker       -> la API (Worker): lee D1, calcula con core, escribe el asiento
+/apps/web/compartido   -> tipos del contrato entre app y API
+/apps/web/migrations   -> schema de D1 versionado
+/apps/web/test         -> pruebas del Worker y de la base
+/apps/web/e2e          -> pruebas de navegador
 ```
 
-`core` corre igual en Node (tests), Deno (Edge Functions) y browser (previews). Nada de `fetch`, DB, ni `Date.now()`: la fecha "hoy" entra siempre como parámetro. Los imports relativos llevan extensión `.ts` para que Deno los resuelva sin build.
+`core` corre igual en Node (tests), en el Worker y en el navegador (vistas previas). Nada de `fetch`, DB, ni `Date.now()`: la fecha "hoy" entra siempre como parámetro.
 
 ## 3. Reglas no negociables
 
-1. **Dinero en pesos enteros.** Todos los montos son pesos COP enteros: `BIGINT` en Postgres, `number` validado con `Number.isSafeInteger` en TypeScript. Prohibidos los fraccionarios. Las multiplicaciones intermedias que puedan pasar de 2^53 (saldo × tasa) se hacen en `BigInt` y se redondean a entero al salir.
+1. **Dinero en pesos enteros.** Todos los montos son pesos COP enteros: `INTEGER` en D1 (con tope 2^53−1 por check), `number` validado con `Number.isSafeInteger` en TypeScript. Prohibidos los fraccionarios. Las multiplicaciones intermedias que puedan pasar de 2^53 (saldo × tasa) se hacen en `BigInt` y se redondean a entero al salir.
 2. **Tasas en puntos básicos.** `300` = 3.00 % mensual, `INTEGER`. Igual para la parte de cada socio.
 3. **El redondeo cuadra siempre.** `repartirProporcional(total, pesos[])` — la última parte con peso > 0 absorbe el residuo; test de `sum(resultado) === total` sobre miles de casos aleatorios.
-4. **Fechas calendario.** Desembolsos, cortes y pagos son `DATE` en Postgres y `YYYY-MM-DD` en TypeScript. Nunca `new Date()` para aritmética de negocio. Los `created_at` de auditoría son `TIMESTAMPTZ`. Zona de referencia: `America/Bogota`.
-5. **El libro contable es inmutable.** `pagos`, `aplicaciones` y `reparto_socios` no tienen políticas de `UPDATE` ni `DELETE`. Corregir = insertar un reverso que apunta al original (`reversa_de`).
-6. **Todo movimiento de plata pasa por una transacción con bloqueo.** `BEGIN` → `SELECT … FROM prestamos WHERE id = $1 FOR UPDATE` → leer movimientos → calcular con `core` → insertar → `COMMIT`.
-7. **Cero lógica financiera en SQL.** Los cálculos viven solo en `core`. Postgres guarda, valida invariantes y controla acceso.
+4. **Fechas calendario.** Desembolsos, cortes y pagos son texto `YYYY-MM-DD` (validado por check en D1). Nunca `new Date()` para aritmética de negocio. Los `created_at` de auditoría son marcas de tiempo UTC. Zona de referencia: `America/Bogota`.
+5. **El libro contable es inmutable.** `pagos`, `aplicaciones` y `reparto_socios` tienen triggers que rechazan `UPDATE` y `DELETE`. Corregir = insertar un reverso que apunta al original (`reversa_de`).
+6. **Todo movimiento de plata es atómico y serializado por préstamo.** Leer el libro → calcular con `core` → escribir el asiento completo en un `batch` de D1 (una transacción). D1 no tiene bloqueo de filas: la serialización la da el consecutivo `pagos.numero` (ver §6).
+7. **Cero lógica financiera en SQL.** Los cálculos viven solo en `core`. D1 guarda, valida invariantes y controla acceso.
 8. **Tests antes de la UI.** Cada función de `core` va con sus tests desde el primer commit.
 
 ## 4. Reglas de negocio (confirmadas)
@@ -53,7 +57,7 @@ Por ahora el sistema lo usa **una sola persona** (el socio administrador). El se
 | 4 | Mora | **No hay mora** por ahora. Un mes sin pagar solo acumula interés corriente vencido y se reporta como atraso. |
 | 5 | Socios | Cada préstamo define cuánto de la tasa es de cada socio (ej. 3 % = 1 % socio A + 2 % socio B) y cuánto capital puso cada uno. Interés se reparte por `tasa_bp`; capital devuelto por `aporte_capital`. Son proporciones independientes. |
 | 6 | Cancelación total | Se cobra el interés **proporcional hasta el día del pago** (30/360). Es la única excepción al "mes completo". |
-| 7 | Usuarios | Un usuario administrador con correo + clave inicial (debe cambiarla al entrar) y opción de vincular una cuenta Google. El segundo socio no tiene usuario. |
+| 7 | Usuarios | **Sin login en esta etapa** (decisión del 2026-10-01): la app queda disponible directamente. El login se agrega más adelante en un único punto (`worker/acceso.ts`). |
 | 8 | Usura | No se controla. |
 | 9 | Fechas de corte | El mes cuenta desde el desembolso; el corte es el mismo día de cada mes siguiente. Si ese día no existe (31 en un mes de 30), vence el último día del mes. |
 | 10 | Redondeo | La cuota a cobrar se redondea **hacia arriba a los mil**. La UI muestra siempre la cuota exacta al lado. El excedente del redondeo se imputa como **abono a capital**. |
@@ -90,7 +94,7 @@ Reglas adicionales:
 
 ### 5.4 Cancelación total (fecha `f`, período en curso `k`)
 
-La Edge Function recibe el total que se le mostró al usuario; si el cálculo dio otra cifra, rechaza (`COTIZACION_DESACTUALIZADA`). Después de liquidar, el interés del período `k` queda fijado en lo cobrado y los períodos siguientes no generan interés.
+El Worker recibe el total que se le mostró al usuario; si el cálculo dio otra cifra, rechaza (`COTIZACION_DESACTUALIZADA`). Después de liquidar, el interés del período `k` queda fijado en lo cobrado y los períodos siguientes no generan interés.
 
 `vencidos_no_pagados + max(0, proporcional_k − ya_pagado_k) + saldo`, con
 `proporcional_k = redondear(saldo_k · tasa_bp · dias / (10000 · 30))`, `dias = min(30, dias30E360(corte(k-1), f))`, y `dias = 30` si `f = corte(k)`. Si el interés del período ya se había pagado completo por adelantado, no se devuelve la diferencia.
@@ -99,132 +103,38 @@ La Edge Function recibe el total que se le mostró al usuario; si el cálculo di
 
 Solo se puede reversar el **último** movimiento no reversado del préstamo (LIFO). Así la imputación de los movimientos posteriores nunca queda inconsistente. El reverso lleva `monto` negativo y aplicaciones espejo negativas.
 
-## 6. Schema (Postgres)
+## 6. Schema (D1 / SQLite)
 
-```sql
-create type estado_prestamo as enum ('activo','pagado','castigado');  -- atraso se calcula, no se guarda
-create type rol_usuario     as enum ('admin','consulta');
-create type tipo_pago       as enum ('pago','liquidacion','reverso');
+Definido en `apps/web/migrations`. Tablas `STRICT` (SQLite rechaza valores de otro tipo):
 
--- Quién entra al sistema. La clave vive en auth.users (hash), nunca aquí.
-create table usuarios (
-  id                 uuid primary key references auth.users(id) on delete cascade,
-  email              text not null unique,
-  email_google       text unique,              -- cuenta Google vinculada (informativo; el vínculo real es auth.identities)
-  nombre             text not null,
-  rol                rol_usuario not null default 'consulta',
-  activo             boolean not null default true,
-  debe_cambiar_clave boolean not null default true,
-  created_at         timestamptz not null default now()
-);
+- `socios` — dueños de la plata.
+- `clientes` — `documento` único.
+- `prestamos` — capital, tasa, fecha de desembolso, plazo opcional, `estado` (`activo`/`pagado`/`castigado`; el atraso se calcula, no se guarda).
+- `prestamo_socios` — parte de la tasa y del capital de cada socio.
+- `pagos` — el libro: `tipo` (`pago`/`liquidacion`/`reverso`), `monto` (negativo en reversos), `reversa_de` único, y **`numero`**: consecutivo del movimiento dentro del préstamo.
+- `aplicaciones` — cómo se imputó cada pago (interés por período, o capital).
+- `reparto_socios` — cuánto de cada aplicación le tocó a cada socio (congelado para auditoría).
+- `prestamos_verificados` / `pagos_verificados` — filas de cierre (ver abajo).
 
--- Dueños de la plata. Un socio puede no tener usuario.
-create table socios (
-  id         uuid primary key default gen_random_uuid(),
-  nombre     text not null,
-  usuario_id uuid unique references usuarios(id),
-  activo     boolean not null default true,
-  created_at timestamptz not null default now()
-);
+**Lo que la base hace cumplir por sí misma (triggers y checks):**
 
-create table clientes (
-  id         uuid primary key default gen_random_uuid(),
-  nombre     text not null,
-  documento  text unique,
-  telefono   text,
-  direccion  text,
-  notas      text,
-  created_at timestamptz not null default now()
-);
+- **Libro inmutable:** `UPDATE` y `DELETE` sobre `pagos`, `aplicaciones` y `reparto_socios` se rechazan siempre.
+- **Condiciones congeladas:** con el primer pago ya no se pueden cambiar capital, tasa, fechas, plazo, cliente ni socios del préstamo. El estado y las notas sí.
+- **Reversos:** mismo préstamo, monto exacto negado, no se reversa un reverso, y un pago se reversa una sola vez.
+- **Consecutivo sin huecos:** `pagos.numero` debe ser exactamente el siguiente del préstamo (`unique` + trigger).
+- **Sumas de control al cierre:** SQLite no tiene constraints diferidos, así que el Worker inserta una fila de cierre al final de cada transacción y su trigger verifica el conjunto: las tasas y aportes de los socios suman los del préstamo; las aplicaciones suman el monto del pago; el reparto suma cada aplicación, con signos coherentes y solo socios del préstamo. Si algo no cuadra, se revierte toda la transacción.
 
-create table prestamos (
-  id               uuid primary key default gen_random_uuid(),
-  cliente_id       uuid not null references clientes(id),
-  capital_inicial  bigint  not null check (capital_inicial > 0),
-  tasa_mensual_bp  integer not null check (tasa_mensual_bp > 0),
-  fecha_desembolso date    not null,
-  plazo_meses      integer check (plazo_meses > 0),   -- null = capital "cuando pueda"
-  estado           estado_prestamo not null default 'activo',
-  notas            text,
-  creado_por       uuid not null references usuarios(id),
-  created_at       timestamptz not null default now()
-);
+**Concurrencia (reemplazo de `FOR UPDATE`).** Dos operaciones simultáneas sobre un préstamo leen N movimientos y ambas calculan el número N+1. La primera entra; la segunda choca, se descarta entera, y el Worker la reintenta leyendo el libro ya actualizado (hasta 3 veces). Hay una prueba que mete un pago justo entre la lectura y la escritura del Worker: sin el consecutivo, esa prueba falla con un doble cobro del mismo mes.
 
-create table prestamo_socios (
-  prestamo_id    uuid not null references prestamos(id),
-  socio_id       uuid not null references socios(id),
-  tasa_bp        integer not null check (tasa_bp >= 0),
-  aporte_capital bigint  not null check (aporte_capital >= 0),
-  primary key (prestamo_id, socio_id)
-);
-
-create table pagos (
-  id           uuid primary key default gen_random_uuid(),
-  prestamo_id  uuid not null references prestamos(id),
-  tipo         tipo_pago not null,
-  fecha        date not null,
-  monto        bigint not null,
-  medio        text,
-  nota         text,
-  reversa_de   uuid unique references pagos(id),   -- unique: un pago se reversa una sola vez
-  soporte_path text,                               -- ruta en el bucket privado `soportes`
-  creado_por   uuid not null references usuarios(id),
-  created_at   timestamptz not null default now(),
-  check ((tipo = 'reverso') = (reversa_de is not null)),
-  check ((tipo = 'reverso' and monto < 0) or (tipo <> 'reverso' and monto > 0))
-);
-
--- Cómo se imputó cada pago. periodo = número de corte para interés; null para capital.
-create table aplicaciones (
-  id        uuid primary key default gen_random_uuid(),
-  pago_id   uuid not null references pagos(id),
-  periodo   integer check (periodo > 0),
-  a_interes bigint not null default 0,
-  a_capital bigint not null default 0,
-  check ((periodo is not null and a_capital = 0) or (periodo is null and a_interes = 0))
-);
-
--- Reparto de cada aplicación entre socios (calculado por core, guardado para auditoría).
-create table reparto_socios (
-  aplicacion_id uuid not null references aplicaciones(id),
-  socio_id      uuid not null references socios(id),
-  interes       bigint not null default 0,
-  capital       bigint not null default 0,
-  primary key (aplicacion_id, socio_id)
-);
-```
-
-Cambios frente al borrador original y por qué:
-
-- **Se eliminó la tabla `cuotas`** (y `version_plan`, `metodo`, `politica_abono`, `dia_pago`). Con solo interés y capital libre, el "plan" es una proyección que `core` deriva de las condiciones + los pagos. Guardarlo duplicaba cálculo en la base (viola regla 7) y obligaba a versionarlo en cada abono.
-- **`en_mora` / `vencida` no se guardan:** dependen de "hoy" y quedarían desactualizados. Se calculan con `estadoPrestamo(…, hoy)`.
-- **`usuarios` separado de `socios`:** quien entra al sistema no es lo mismo que quien pone plata.
-- **`pagos.tipo`**, `reversa_de unique` y checks de signo: un reverso no puede duplicarse y el signo del monto es coherente.
-- **`reparto_socios`:** deja congelado cuánto le tocó a cada socio de cada pago.
-- **`soporte_path`** en vez de URL: el bucket es privado; la UI pide URLs firmadas temporales.
-
-**Invariantes (constraint triggers `deferrable initially deferred`):**
-QUE DEBO HACER PARA LA BASE DE DATOS DE SUPABASE??, 
-- `SUM(prestamo_socios.tasa_bp) = prestamos.tasa_mensual_bp` por préstamo.
-- `SUM(prestamo_socios.aporte_capital) = prestamos.capital_inicial` por préstamo.
-- `prestamo_socios` no se modifica si el préstamo ya tiene pagos.
-- Un reverso no puede reversar otro reverso y debe ser del mismo préstamo y por el monto exacto negado.
-- Por cada pago, `SUM(a_interes + a_capital) = monto`; por cada aplicación, la suma de `reparto_socios` cuadra con ella.
-
-**Inmutabilidad a nivel base:** además de no tener políticas RLS de escritura, `pagos`, `aplicaciones` y `reparto_socios` tienen triggers que rechazan `UPDATE`, `DELETE` y `TRUNCATE` para cualquier rol (incluida la conexión privilegiada de las Edge Functions). Las condiciones de un préstamo (capital, tasa, fechas, plazo, cliente) y sus socios se congelan en cuanto tiene un pago; el estado y las notas sí se pueden cambiar.
-
-**Índices:** `prestamos(cliente_id)`, `prestamos(estado)`, `pagos(prestamo_id, fecha)`, `aplicaciones(pago_id)`.
+Límite conocido frente a Postgres: la fila de cierre la inserta el Worker; alguien que escriba directo en D1 podría omitirla. Las demás invariantes se cumplen aunque se escriba por fuera de la app.
 
 ## 7. Seguridad
 
-- RLS activada en **todas** las tablas desde la primera migración.
-- Helpers `es_usuario_activo()` y `es_admin()` (`security definer`, `stable`, `search_path` fijo) contra `usuarios` con `auth.uid()`.
-- **Lectura:** cualquier usuario activo lee todo.
-- **Escritura de `clientes`:** solo admin, vía `supabase-js`.
-- **`prestamos`, `prestamo_socios`, `pagos`, `aplicaciones`, `reparto_socios`:** **sin políticas de escritura para `authenticated`.** Solo las Edge Functions escriben (conexión privilegiada). Sin `UPDATE`/`DELETE` en el libro contable, punto.
-- **Auth:** registro público **desactivado**. El admin se crea por script de seed con `ADMIN_EMAIL` y `ADMIN_CLAVE_INICIAL` desde variables de entorno (nunca en el repo) y `debe_cambiar_clave = true`. Google se vincula desde la sesión ya iniciada (`linkIdentity`, manual linking activado). Un login Google no vinculado no tiene fila en `usuarios` → RLS no le deja ver nada.
-- **Storage:** bucket privado `soportes` (cédulas, pagarés, comprobantes); políticas que exigen usuario activo.
-- Las Edge Functions validan el JWT y el rol del llamante antes de tocar nada. La `service_role` key nunca llega al frontend.
+- **Sin login en esta etapa.** Cualquiera que llegue a la dirección de la app puede ver y registrar movimientos. Aceptable solo en local o mientras la dirección no se comparta. **Antes de publicarla hay que decidir**: abierta, clave compartida, login con Google o Cloudflare Access.
+- **Un solo punto de control:** toda petición a `/api/*` pasa por `autorizar()` en `worker/acceso.ts`, que hoy devuelve rol admin. Agregar login es cambiar esa función; el resto del Worker ya distingue lectura (`GET`) de escritura (exige admin). En la app, `useSesion()` es el punto equivalente.
+- La base **no es accesible desde el navegador**: solo el Worker tiene el binding de D1. No hay claves de base de datos en el frontend.
+- Todo valor externo se valida (`worker/entrada.ts`) y se enlaza como parámetro; nunca se interpola en SQL.
+- No hay identidad del usuario todavía, así que los pagos no guardan quién los registró.
 - Datos de terceros bajo Ley 1581 de 2012.
 
 ## 8. Motor de cálculo (`/packages/core`)
@@ -243,22 +153,21 @@ QUE DEBO HACER PARA LA BASE DE DATOS DE SUPABASE??,
 - `estadoPrestamo(prestamo, movimientos, hoy)`: saldo de capital, interés vencido no pagado, períodos y días de atraso, lo que se cobra hoy y el próximo corte (exacto y redondeado), capital e interés pagados, proyección, total al finalizar (si hay plazo), y por socio: interés cobrado, capital devuelto y pendiente, interés vencido y proyectado.
 - `repartirInteres` / `repartirCapital` — reparto entre socios (§5.3).
 
-## 9. Edge Functions
+## 9. API (`apps/web/worker`)
 
-Una por operación, cada una en transacción con `FOR UPDATE` sobre el préstamo, devolviendo el `EstadoFinanciero` actualizado:
+| Método y ruta | Qué hace |
+|---|---|
+| `GET /api/socios` · `POST` · `PATCH /:id` | Lista, crea, renombra o activa/desactiva socios |
+| `GET /api/clientes` · `GET /:id` · `POST` · `PATCH /:id` | Clientes |
+| `GET /api/prestamos[?clienteId=]` · `GET /:id` | Préstamos con su libro completo (pagos → aplicaciones → reparto) |
+| `POST /api/prestamos` | Crea el préstamo con sus socios; devuelve plan y estado |
+| `POST /api/prestamos/:id/pagos` | Imputa con `aplicarPago` y guarda el asiento. `simular: true` no guarda |
+| `POST /api/prestamos/:id/liquidacion` | `simular: true` cotiza; para ejecutar exige `montoCotizado`. Marca `pagado` |
+| `POST /api/prestamos/:id/reversos` | Reversa el último movimiento; si reabre un préstamo pagado, vuelve a `activo` |
 
-- `crear-prestamo` — valida socios (sumas), inserta préstamo + socios; devuelve plan y estado.
-- `registrar-pago` — imputa con `aplicarPago`, inserta `pagos` + `aplicaciones` + `reparto_socios`. `simular: true` devuelve la imputación sin guardar (para mostrarla antes de confirmar).
-- `liquidar-prestamo` — `simular: true` cotiza; para ejecutar exige `montoCotizado`. Marca `pagado`.
-- `reversar-pago` — solo el último movimiento; inserta el reverso espejo. Si reabre un préstamo pagado, vuelve a `activo`.
-
-Detalles de implementación (`supabase/functions/_shared`):
-- **Sesión:** `verify_jwt = false` en el gateway; cada función valida el token contra `/auth/v1/user` y el rol contra `public.usuarios` dentro de la transacción. Funciona igual con claves nuevas y legacy.
-- **Conexión:** `postgres.js` con `SUPABASE_DB_URL` (en local, `PRESTAMOS_DB_URL`, porque el resolvedor de Deno rechaza el guion bajo del host que inyecta la CLI). `bigint` se lee como `number` validado y `date` como string `YYYY-MM-DD`.
-- **Orden del libro:** `pagos.secuencia` (identity) — `created_at` puede empatar.
-- **"Hoy"** se calcula en `America/Bogota` en la función y entra a `core` como parámetro.
-- **Errores:** `400 ENTRADA_INVALIDA`, `401 NO_AUTENTICADO`, `403 SIN_PERMISO`, `404`, `422 <codigo de core>`, `409 INVARIANTE_VIOLADA` (la base rechazó algo que core dejó pasar: es un bug), `500`.
-- **Concurrencia:** hay un test de integración que retiene el bloqueo del préstamo desde otra transacción, registra un pago y verifica que la función lo ve. Sin `FOR UPDATE` ese test falla con un doble cobro del mismo mes, que las invariantes de la base no detectan porque cada asiento cuadra por separado.
+- **"Hoy"** se calcula en `America/Bogota` en el Worker y entra a `core` como parámetro.
+- **Errores** (`{ error: { codigo, mensaje } }`): `400 ENTRADA_INVALIDA`, `404`, `422 <código de core>`, `409 CONFLICTO` (se agotaron los reintentos), `409 INVARIANTE_VIOLADA` (la base rechazó algo que core dejó pasar: es un bug), `500`.
+- El estado de cada préstamo no se guarda: la app lo calcula con `core` a partir del libro que devuelve la API.
 
 ## 10. Reportes
 
@@ -269,21 +178,24 @@ Detalles de implementación (`supabase/functions/_shared`):
 
 ## 11. UI
 
-Mobile-first (apps/web, React + Vite + Tailwind). Pantallas: Inicio (atrasados, cortes de la semana, cartera, tarjeta por socio) · Clientes (búsqueda, alta, edición) · Préstamos (filtros) · Nuevo préstamo (plan en vivo, suma de tasas y aportes de socios) · Detalle (saldo, vencido, próximo corte, socios, pagos, meses) · Registrar pago y Cancelar todo (imputación calculada con core antes de confirmar) · Cuenta (socios, clave, vincular Google).
-
-- Las lecturas pasan por RLS y se paginan de a 1.000 filas (max_rows): un libro truncado daría saldos falsos.
-- El primer ingreso obliga a cambiar la clave (usuarios.debe_cambiar_clave).
-- Usuarios de consulta no ven botones de escritura (y la base igual lo impide).
-- Pendiente: subir soportes (fotos de cédula/comprobantes) al bucket soportes.
+Mobile-first (`apps/web/src`). Pantallas: Inicio (atrasados, cortes de la semana, cartera, tarjeta por socio) · Clientes (búsqueda, alta, edición) · Préstamos (filtros) · Nuevo préstamo (plan en vivo, suma de tasas y aportes de socios) · Detalle (saldo, vencido, próximo corte, socios, pagos, meses) · Registrar pago y Cancelar todo (imputación calculada con core antes de confirmar) · Cuenta (socios).
 
 Moneda: `$ 1.250.000`. Donde haya cuota redondeada se muestra al lado la exacta, ej. **$ 38.000** (exacta $ 37.037).
 
-## 12. Fases
+Pendiente: login, y subir soportes (fotos de cédula y comprobantes) a R2.
 
-- **F1:** monorepo + `core` (fechas, dinero, `generarPlanDePagos`) + tests
-- **F2:** `aplicarPago`, `cotizarLiquidacion`, `estadoPrestamo`, `repartirPorSocio` + tests
-- **F3:** migraciones (schema + constraints + RLS) + seed
-- **F4:** Edge Functions + tests de integración contra Supabase local
-- **F5:** UI
+## 12. Comandos
 
-Cada fase termina mostrando los tests corriendo y espera revisión.
+Desde la raíz del repo:
+
+| Comando | Qué hace |
+|---|---|
+| `npm run dev` | App + API + D1 local en http://127.0.0.1:5173 |
+| `npm run db:migrar` | Aplica las migraciones a la D1 local |
+| `npm test` | Motor (90) + Worker y base (20) |
+| `npm run test:e2e` | Navegador (Edge) contra una base vacía propia |
+| `npm run typecheck` | Tipos de la app, el Worker y el motor |
+| `npm run deploy` | Compila y publica en Cloudflare (requiere `wrangler login` y haber decidido el acceso, §7) |
+
+Historia: F1–F2 motor · F3–F5 sobre Supabase (Postgres, Edge Functions, RLS) · migración a Cloudflare el 2026-10-01. El código de Supabase está en el historial de git hasta el commit `8fe3935`.
+

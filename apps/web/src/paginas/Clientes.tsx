@@ -1,12 +1,11 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { useSesion } from '../auth/Sesion.tsx';
-import { cargarCliente, cargarClientes, cargarPrestamos, type Cliente } from '../datos/cartera.ts';
+import { cargarCliente, cargarClientes, cargarPrestamos, guardarCliente, type Cliente } from '../datos/cartera.ts';
 import { conEstado } from '../datos/reportes.ts';
 import { useCarga } from '../datos/useCarga.ts';
 import { fechaCorta, pesos, porcentaje } from '../lib/formato.ts';
 import { hoyBogota } from '../lib/hoy.ts';
-import { supabase } from '../lib/supabase.ts';
 import { Aviso, Boton, Campo, Cargando, Fila, Pantalla, Tarjeta } from '../ui/componentes.tsx';
 import { EtiquetaEstado } from './Prestamos.tsx';
 
@@ -45,14 +44,13 @@ function FormularioCliente({
     if (!limpio.nombre) return setError('El nombre es obligatorio');
     setCargando(true);
     setError(null);
-    const r = inicial
-      ? await supabase.from('clientes').update(limpio).eq('id', inicial.id).select('id').single()
-      : await supabase.from('clientes').insert(limpio).select('id').single();
-    setCargando(false);
-    if (r.error) {
-      return setError(r.error.code === '23505' ? 'Ya existe un cliente con ese documento' : r.error.message);
+    try {
+      const guardado = await guardarCliente(limpio, inicial?.id);
+      alGuardar(guardado.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setCargando(false);
     }
-    alGuardar(r.data.id as string);
   }
 
   return (

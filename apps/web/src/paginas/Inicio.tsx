@@ -12,7 +12,7 @@ function FilaCobro({ p, atrasado }: { p: PrestamoConEstado; atrasado: boolean })
   return (
     <Link to={`/prestamos/${p.fila.id}`} className="flex items-center justify-between gap-3 py-3 hover:bg-slate-50">
       <div className="min-w-0">
-        <p className="truncate font-medium text-slate-900">{p.fila.clientes?.nombre}</p>
+        <p className="truncate font-medium text-slate-900">{p.fila.cliente_nombre}</p>
         <p className="text-sm text-slate-500">
           {atrasado ? (
             <Etiqueta color="rojo">

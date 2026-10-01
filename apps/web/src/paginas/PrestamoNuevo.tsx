@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { cargarClientes, cargarSocios } from '../datos/cartera.ts';
 import { useCarga } from '../datos/useCarga.ts';
-import { invocar } from '../lib/funciones.ts';
+import { api } from '../lib/api.ts';
 import { fechaCorta, leerPesos, leerPorcentajeABp, pesos, porcentaje } from '../lib/formato.ts';
 import { hoyBogota } from '../lib/hoy.ts';
 import { Aviso, Boton, Campo, CampoPesos, Cargando, Cuota, Fila, Pantalla, Selector, Tarjeta } from '../ui/componentes.tsx';
@@ -79,7 +79,7 @@ export function PrestamoNuevo() {
     setGuardando(true);
     setError(null);
     try {
-      const r = await invocar<{ prestamoId: string }>('crear-prestamo', {
+      const r = await api<{ prestamoId: string }>('POST', '/prestamos', {
         clienteId,
         ...vista.prestamo,
         notas: notas.trim() || null,

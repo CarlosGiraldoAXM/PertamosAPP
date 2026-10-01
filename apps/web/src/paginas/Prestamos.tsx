@@ -73,7 +73,7 @@ export function Prestamos() {
               {lista.map((p) => (
                 <Link key={p.fila.id} to={`/prestamos/${p.fila.id}`} className="flex items-center justify-between gap-3 py-3 hover:bg-slate-50">
                   <div className="min-w-0">
-                    <p className="truncate font-medium text-slate-900">{p.fila.clientes?.nombre}</p>
+                    <p className="truncate font-medium text-slate-900">{p.fila.cliente_nombre}</p>
                     <p className="text-sm text-slate-500">
                       {pesos(p.prestamo.capital)} · {porcentaje(p.prestamo.tasaMensualBp)} · {fechaCorta(p.prestamo.fechaDesembolso)}
                     </p>

@@ -5,7 +5,7 @@ import { useSesion } from '../auth/Sesion.tsx';
 import { cargarPrestamo, cargarSocios, type PagoFila } from '../datos/cartera.ts';
 import { conEstado } from '../datos/reportes.ts';
 import { useCarga } from '../datos/useCarga.ts';
-import { invocar } from '../lib/funciones.ts';
+import { api } from '../lib/api.ts';
 import { fechaCorta, pesos, porcentaje } from '../lib/formato.ts';
 import { hoyBogota } from '../lib/hoy.ts';
 import { Aviso, Boton, Campo, Cargando, Cuota, Etiqueta, Fila, Pantalla, Tarjeta } from '../ui/componentes.tsx';
@@ -51,7 +51,7 @@ export function PrestamoDetalle() {
     setEnviando(true);
     setError(null);
     try {
-      await invocar('reversar-pago', { prestamoId: id, pagoId, nota: nota.trim() || null });
+      await api('POST', `/prestamos/${id}/reversos`, { pagoId, nota: nota.trim() || null });
       setReversando(null);
       setNota('');
       carga.recargar();
@@ -64,7 +64,7 @@ export function PrestamoDetalle() {
 
   return (
     <Pantalla
-      titulo={p?.fila.clientes?.nombre ?? 'Préstamo'}
+      titulo={p?.fila.cliente_nombre ?? 'Préstamo'}
       subtitulo={p ? `${pesos(p.prestamo.capital)} al ${porcentaje(p.prestamo.tasaMensualBp)} mensual` : undefined}
       volver={p ? `/clientes/${p.fila.cliente_id}` : '/prestamos'}
     >
