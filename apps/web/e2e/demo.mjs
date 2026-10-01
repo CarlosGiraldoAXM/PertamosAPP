@@ -45,10 +45,12 @@ const jorge = await prestamo('Jorge Ramírez', '1002', 2_500_000, 500, 200, 1_00
 await prestamo('Luisa Fernanda Ortiz', '1003', 800_000, 400, 400, 800_000, '2026-06-05', null, [
   ['2026-07-05', 32_000], ['2026-08-05', 32_000], ['2026-09-05', 32_000],
 ]);
-await prestamo('Pedro Castaño', '1004', 1_500_000, 300, 100, 500_000, '2026-03-20', 6, [['2026-04-20', 45_000]]);
+const pedro = await prestamo('Pedro Castaño', '1004', 1_500_000, 300, 100, 500_000, '2026-03-20', 6, [['2026-04-20', 45_000]]);
+
+const largo = await prestamo('Rosa Elena Vargas', '1005', 600_000, 400, 400, 600_000, '2023-06-12', null, [['2023-07-12', 24_000]]);
 
 const navegador = await chromium.launch({ channel: 'msedge' });
-const page = await navegador.newPage({ viewport: { width: 390, height: 844 }, locale: 'es-CO' });
+const page = await navegador.newPage({ viewport: { width: 390, height: 844 }, locale: 'es-CO', acceptDownloads: true });
 const captura = async (ruta, esperar, archivo) => {
   await page.goto(base + ruta);
   await page.getByText(esperar).first().waitFor();
@@ -62,5 +64,13 @@ await captura(`/prestamos/${jorge}`, 'Debe de capital', 'detalle');
 await page.goto(base + '/');
 await page.getByText('Plata prestada hoy').waitFor();
 await page.screenshot({ path: `${salida}/inicio-pantalla.png` });
+// Estado de cuenta en PDF de dos préstamos.
+for (const [id, archivo] of [[jorge, 'estado-jorge'], [pedro, 'estado-pedro'], [largo, 'estado-largo']]) {
+  await page.goto(`${base}/prestamos/${id}`);
+  const descarga = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Estado de cuenta en PDF' }).click();
+  await page.getByRole('button', { name: 'Descargar' }).click();
+  await (await descarga).saveAs(`${salida}/${archivo}.pdf`);
+}
 await navegador.close();
 console.log('capturas listas');

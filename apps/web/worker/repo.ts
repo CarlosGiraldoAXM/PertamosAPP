@@ -33,7 +33,7 @@ export async function cargarPrestamos(db: D1Database, filtro: Filtro = {}): Prom
   const q = (sql: string) => (valor === null ? db.prepare(sql) : db.prepare(sql).bind(valor));
 
   const [prestamos, socios, pagos, aplicaciones, repartos] = await db.batch([
-    q(`select p.id, p.cliente_id, c.nombre as cliente_nombre, p.capital_inicial, p.tasa_mensual_bp, p.fecha_desembolso,
+    q(`select p.id, p.cliente_id, c.nombre as cliente_nombre, c.documento as cliente_documento, p.capital_inicial, p.tasa_mensual_bp, p.fecha_desembolso,
               p.plazo_meses, p.estado, p.notas, p.created_at
        from prestamos p join clientes c on c.id = p.cliente_id ${donde}
        order by p.fecha_desembolso desc, p.id`),

@@ -31,6 +31,7 @@ function prestamo(id: string, fechaDesembolso: string, pagos: [fecha: string, mo
       id,
       cliente_id: 'cli',
       cliente_nombre: `Cliente ${id}`,
+      cliente_documento: null,
       capital_inicial: p.capital,
       tasa_mensual_bp: p.tasaMensualBp,
       fecha_desembolso: fechaDesembolso,

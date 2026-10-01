@@ -94,6 +94,16 @@ test('socios → cliente → préstamo con dos socios → pago → reverso → c
   await page.getByRole('link', { name: /Préstamos/ }).click();
   await page.getByRole('link', { name: /María Gómez/ }).click();
 
+  // Estado de cuenta en PDF para el cliente: se genera y queda listo para compartir o descargar
+  await page.getByRole('button', { name: 'Estado de cuenta en PDF' }).click();
+  await expect(page.getByText('El estado de cuenta está listo')).toBeVisible();
+  const descarga = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Descargar' }).click();
+  const pdf = await descarga;
+  expect(pdf.suggestedFilename()).toMatch(/^Estado de cuenta - María Gómez - \d{4}-\d{2}-\d{2}\.pdf$/);
+  const ruta = await pdf.path();
+  expect((await import('node:fs')).readFileSync(ruta).subarray(0, 5).toString()).toBe('%PDF-');
+
   // Cancelación total
   await page.getByRole('button', { name: 'Cancelar todo' }).click();
   await expect(page.getByRole('heading', { name: 'Cancelar todo' })).toBeVisible();

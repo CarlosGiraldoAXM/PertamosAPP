@@ -184,6 +184,8 @@ Moneda: `$ 1.250.000`. Donde haya cuota redondeada se muestra al lado la exacta,
 
 **Gráficas** (`src/ui/graficas.tsx`, SVG/HTML propios, sin librerías): cifra principal, columnas de interés cobrado por mes (se toca un mes para ver su valor), medidor del cobro del mes, barras partidas de cartera al día/atrasada y de capital por socio, y una tira con un cuadrito por mes en el detalle del préstamo. Reglas: el color nunca es el único canal (siempre hay texto o símbolo: verde y rojo no se distinguen con daltonismo), los valores exactos se ven sin tooltip, y cada gráfica tiene su equivalente en texto. La paleta se validó con el script de la guía de visualización sobre el blanco de las tarjetas.
 
+**Estado de cuenta en PDF** (botón en el detalle del préstamo). Documento para el **cliente**: capital que debe hoy, capital abonado, interés pagado, interés atrasado, próximo pago, cuánto cuesta cancelar todo hoy, cada pago con su reparto entre interés y capital y el capital que quedó, y el mes a mes. **No incluye el reparto entre socios** (es interno) ni los pagos reversados. Los datos los arma `src/datos/estadoCuenta.ts` a partir de core (con tests); `src/lib/pdfEstadoCuenta.ts` solo los dibuja con jsPDF, que se carga bajo demanda. Va en dos pasos — generar y luego Compartir/Descargar — porque Safari solo deja abrir el menú de compartir como respuesta directa a un toque.
+
 Pendiente: login, y subir soportes (fotos de cédula y comprobantes) a R2.
 
 ## 12. Comandos

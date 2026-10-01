@@ -1,13 +1,15 @@
 import { analizarLibro } from '@prestamos/core';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useSesion } from '../auth/Sesion.tsx';
 import { cargarPrestamo, cargarSocios, type PagoFila } from '../datos/cartera.ts';
+import { armarEstadoDeCuenta } from '../datos/estadoCuenta.ts';
 import { conEstado } from '../datos/reportes.ts';
 import { useCarga } from '../datos/useCarga.ts';
 import { api } from '../lib/api.ts';
 import { fechaCorta, pesos, porcentaje } from '../lib/formato.ts';
 import { hoyBogota } from '../lib/hoy.ts';
+import { compartir, descargar, generarPdfEstadoDeCuenta, nombreDelArchivo, puedeCompartir } from '../lib/pdfEstadoCuenta.ts';
 import { Aviso, Boton, Campo, Cargando, Cuota, Etiqueta, Fila, Pantalla, Tarjeta } from '../ui/componentes.tsx';
 import { Medidor, TiraDeMeses, type EstadoMes } from '../ui/graficas.tsx';
 import { EtiquetaEstado } from './Prestamos.tsx';
@@ -35,6 +37,9 @@ export function PrestamoDetalle() {
   const [nota, setNota] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [generandoPdf, setGenerandoPdf] = useState(false);
+  const [pdf, setPdf] = useState<{ blob: Blob; nombre: string } | null>(null);
+  const [errorPdf, setErrorPdf] = useState<string | null>(null);
 
   const carga = useCarga(async () => {
     const [p, socios] = await Promise.all([cargarPrestamo(id), cargarSocios()]);
@@ -47,6 +52,23 @@ export function PrestamoDetalle() {
   const ultimoEfectivo = p ? [...p.pagos].reverse().find((x) => efectivos.has(x.id)) : undefined;
   const reversados = new Set(p?.pagos.map((x) => x.reversa_de).filter(Boolean));
   const activo = p?.fila.estado === 'activo';
+
+  // Si cambia el libro (un pago nuevo, un reverso), el PDF generado ya no sirve.
+  useEffect(() => setPdf(null), [p?.pagos.length]);
+
+  async function estadoDeCuenta() {
+    if (!p) return;
+    setGenerandoPdf(true);
+    setErrorPdf(null);
+    try {
+      const ec = armarEstadoDeCuenta(p, hoy);
+      setPdf({ blob: await generarPdfEstadoDeCuenta(ec), nombre: nombreDelArchivo(ec) });
+    } catch (err) {
+      setErrorPdf(err instanceof Error ? err.message : String(err));
+    } finally {
+      setGenerandoPdf(false);
+    }
+  }
 
   async function reversar(pagoId: string) {
     setEnviando(true);
@@ -120,6 +142,31 @@ export function PrestamoDetalle() {
                 </Boton>
               </div>
             )}
+            {pdf ? (
+              <div className="mt-2 rounded-xl bg-slate-50 p-3">
+                <p className="mb-2 text-sm font-medium text-slate-900">El estado de cuenta está listo</p>
+                <div className="flex gap-2">
+                  {puedeCompartir(pdf.blob, pdf.nombre) && (
+                    <Boton className="flex-1" onClick={() => compartir(pdf.blob, pdf.nombre).catch((err) => setErrorPdf(String(err)))}>
+                      Compartir
+                    </Boton>
+                  )}
+                  <Boton variante="secundario" className="flex-1" onClick={() => descargar(pdf.blob, pdf.nombre)}>
+                    Descargar
+                  </Boton>
+                </div>
+              </div>
+            ) : (
+              <>
+                <Boton variante="secundario" className="mt-2 w-full" cargando={generandoPdf} onClick={estadoDeCuenta}>
+                  Estado de cuenta en PDF
+                </Boton>
+                <p className="mt-1.5 text-center text-xs text-slate-500">
+                  Para enviarle al cliente: sus pagos, cómo se repartieron y cuánto debe.
+                </p>
+              </>
+            )}
+            {errorPdf && <Aviso>{errorPdf}</Aviso>}
           </Tarjeta>
 
           <Tarjeta titulo="Socios">

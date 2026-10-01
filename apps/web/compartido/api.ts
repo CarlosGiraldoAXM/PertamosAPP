@@ -21,6 +21,7 @@ export interface PrestamoFila {
   id: string;
   cliente_id: string;
   cliente_nombre: string;
+  cliente_documento: string | null;
   capital_inicial: number;
   tasa_mensual_bp: number;
   fecha_desembolso: string;
