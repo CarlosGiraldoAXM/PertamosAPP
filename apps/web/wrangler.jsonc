@@ -13,6 +13,7 @@
     {
       "binding": "DB",
       "database_name": "prestamos",
+      "database_id": "9096f55c-efdd-4436-83e6-e20e0a1e1252",
       "migrations_dir": "migrations"
     }
   ],
