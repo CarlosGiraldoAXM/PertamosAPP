@@ -30,6 +30,8 @@ export function PrestamoNuevo() {
   const [fecha, setFecha] = useState(hoy);
   const [plazo, setPlazo] = useState('');
   const [notas, setNotas] = useState('');
+  const [vehiculo, setVehiculo] = useState('');
+  const [placa, setPlaca] = useState('');
   const [socios, setSocios] = useState<FilaSocio[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
@@ -83,6 +85,8 @@ export function PrestamoNuevo() {
         clienteId,
         ...vista.prestamo,
         notas: notas.trim() || null,
+        vehiculo: vehiculo.trim() || null,
+        placa: placa.trim().toUpperCase() || null,
       });
       navegar(`/prestamos/${r.prestamoId}`, { replace: true });
     } catch (e) {
@@ -128,6 +132,10 @@ export function PrestamoNuevo() {
                 value={plazo}
                 onChange={(e) => setPlazo(e.target.value.replace(/\D/g, ''))}
               />
+              <div className="grid grid-cols-2 gap-2">
+                <Campo etiqueta="Vehículo (opcional)" placeholder="Mazda 3" value={vehiculo} onChange={(e) => setVehiculo(e.target.value)} />
+                <Campo etiqueta="Placa (opcional)" placeholder="ABC 123" value={placa} onChange={(e) => setPlaca(e.target.value)} />
+              </div>
               <Campo etiqueta="Notas (opcional)" value={notas} onChange={(e) => setNotas(e.target.value)} />
             </div>
           </Tarjeta>

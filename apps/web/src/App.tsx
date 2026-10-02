@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
 import { useSesion } from './auth/Sesion.tsx';
 import { ClienteDetalle, Clientes } from './paginas/Clientes.tsx';
 import { Cuenta } from './paginas/Cuenta.tsx';
+import { Informe } from './paginas/Informe.tsx';
 import { Inicio } from './paginas/Inicio.tsx';
 import { Liquidar, RegistrarPago } from './paginas/Operaciones.tsx';
 import { PrestamoDetalle } from './paginas/PrestamoDetalle.tsx';
@@ -22,6 +23,7 @@ export function App() {
           <Route path="prestamos/:id" element={<PrestamoDetalle />} />
           <Route path="cuenta" element={<Cuenta />} />
         </Route>
+        <Route path="informe" element={<Informe />} />
         {esAdmin && (
           <>
             <Route path="prestamos/nuevo" element={<PrestamoNuevo />} />

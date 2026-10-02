@@ -113,6 +113,8 @@ async function escribirMovimiento(
 export async function crearPrestamo(db: D1Database, e: entrada.Objeto) {
   const clienteId = entrada.uuid(e, 'clienteId');
   const notas = entrada.textoOpcional(e, 'notas', 2000);
+  const vehiculo = entrada.textoOpcional(e, 'vehiculo', 100);
+  const placa = entrada.textoOpcional(e, 'placa', 20);
   const prestamo: Prestamo = {
     capital: entrada.entero(e, 'capital'),
     tasaMensualBp: entrada.entero(e, 'tasaMensualBp'),
@@ -144,10 +146,10 @@ export async function crearPrestamo(db: D1Database, e: entrada.Objeto) {
   await db.batch([
     db
       .prepare(
-        `insert into prestamos (id, cliente_id, capital_inicial, tasa_mensual_bp, fecha_desembolso, plazo_meses, notas)
-         values (?, ?, ?, ?, ?, ?, ?)`,
+        `insert into prestamos (id, cliente_id, capital_inicial, tasa_mensual_bp, fecha_desembolso, plazo_meses, notas, vehiculo, placa)
+         values (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .bind(prestamoId, clienteId, prestamo.capital, prestamo.tasaMensualBp, prestamo.fechaDesembolso, prestamo.plazoMeses, notas),
+      .bind(prestamoId, clienteId, prestamo.capital, prestamo.tasaMensualBp, prestamo.fechaDesembolso, prestamo.plazoMeses, notas, vehiculo, placa),
     ...prestamo.socios.map((s) =>
       db.prepare('insert into prestamo_socios (prestamo_id, socio_id, tasa_bp, aporte_capital) values (?, ?, ?, ?)').bind(prestamoId, s.socioId, s.tasaBp, s.aporteCapital),
     ),
@@ -156,6 +158,16 @@ export async function crearPrestamo(db: D1Database, e: entrada.Objeto) {
   ]);
 
   return { prestamoId, plan: generarPlanDePagos(prestamo), estado: estadoPrestamo(prestamo, [], hoy) };
+}
+
+/** Corrige los datos descriptivos de un préstamo (no sus condiciones, que quedan congeladas con el primer pago). */
+export async function editarDatosPrestamo(db: D1Database, prestamoId: string, e: entrada.Objeto) {
+  await cargarPrestamo(db, prestamoId); // 404 si no existe o si su cliente está eliminado
+  await db
+    .prepare('update prestamos set vehiculo = ?, placa = ?, notas = ? where id = ?')
+    .bind(entrada.textoOpcional(e, 'vehiculo', 100), entrada.textoOpcional(e, 'placa', 20), entrada.textoOpcional(e, 'notas', 2000), prestamoId)
+    .run();
+  return cargarPrestamo(db, prestamoId);
 }
 
 export async function registrarPago(db: D1Database, prestamoId: string, e: entrada.Objeto) {

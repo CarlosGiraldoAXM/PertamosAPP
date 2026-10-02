@@ -29,6 +29,8 @@ function completo(movimientos: Movimiento[], estado: 'activo' | 'pagado' = 'acti
       plazo_meses: null,
       estado,
       notas: null,
+      vehiculo: null,
+      placa: null,
       created_at: '',
       socios: [],
     },

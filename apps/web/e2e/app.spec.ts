@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import ExcelJS from 'exceljs';
 
 /** Falla la prueba ante cualquier error de JavaScript, de consola o respuesta HTTP fallida. */
 function registrarErrores(page: Page): string[] {
@@ -221,5 +222,65 @@ test('eliminar un cliente lo oculta con sus préstamos, y se puede restaurar', a
   await page.goto(`/prestamos/${prestamoId}`);
   await expect(page.getByRole('heading', { name: 'Elena Para Borrar' })).toBeVisible();
   await expect(page.getByText('$ 700.000').first()).toBeVisible();
+  expect(errores).toEqual([]);
+});
+
+test('informe para el socio: descarga el Excel con la misma estructura de la hoja', async ({ page }) => {
+  const errores = registrarErrores(page);
+  const pedir = async (ruta: string, cuerpo: unknown) => (await page.request.post(`/api${ruta}`, { data: cuerpo })).json();
+  const marca = Date.now();
+  const socios = await pedir('/socios', { nombre: `Mateo ${marca}` });
+  const mateo = socios.find((s: { nombre: string }) => s.nombre === `Mateo ${marca}`);
+  const otros = await pedir('/socios', { nombre: `Carlos ${marca}` });
+  const carlos = otros.find((s: { nombre: string }) => s.nombre === `Carlos ${marca}`);
+  const cliente = await pedir('/clientes', { nombre: `INFORME ${marca}` });
+  // $7.000.000 al 3 % (Mateo 2,5 %), con un abono de $3.000.000 al mes.
+  const { prestamoId } = await pedir('/prestamos', {
+    clienteId: cliente.id,
+    capital: 7_000_000,
+    tasaMensualBp: 300,
+    fechaDesembolso: '2026-08-05',
+    plazoMeses: null,
+    vehiculo: 'SPARK BLANCO',
+    placa: 'DDD 444',
+    socios: [
+      { socioId: mateo.id, tasaBp: 250, aporteCapital: 7_000_000 },
+      { socioId: carlos.id, tasaBp: 50, aporteCapital: 0 },
+    ],
+  });
+  await pedir(`/prestamos/${prestamoId}/pagos`, { fecha: '2026-09-05', monto: 210_000 + 3_000_000 });
+
+  await page.goto('/informe');
+  await page.getByLabel('Socio del informe').selectOption({ label: `Mateo ${marca}` });
+  await page.getByLabel('Observaciones').fill('Entra un crédito en noviembre.');
+  await page.getByRole('button', { name: 'Generar Excel' }).click();
+  const descarga = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Descargar' }).click();
+  const archivo = await descarga;
+  expect(archivo.suggestedFilename()).toMatch(/^PAGOS [A-Z]+ \d{4}\.xlsx$/);
+
+  // Se vuelve a leer el archivo descargado, como lo abriría Excel.
+  const libro = new ExcelJS.Workbook();
+  await libro.xlsx.readFile(await archivo.path());
+  const hoja = libro.getWorksheet('Hoja1')!;
+  const fila = (n: number) => 'BCDEFGHIJKL'.split('').map((c) => hoja.getCell(`${c}${n}`).value);
+  expect(fila(1)).toEqual(['CLIENTE', 'VEHICULO', 'PLACA', 'PRESTAMO', 'ABONO A CAP', 'SALDO', 'FECHA DE PAGO', 'TASA INTERES', 'TOTAL INTERES', `MATEO ${marca}`, '%']);
+
+  // La fila de este préstamo (la base de pruebas tiene otros de los tests anteriores).
+  let n = 2;
+  while (hoja.getCell(`B${n}`).value !== `INFORME ${marca}`) n++;
+  const [, vehiculo, placa, prestamo, abono, saldo, fecha, tasa, interes, parte, pct] = fila(n);
+  expect([vehiculo, placa, prestamo, abono, saldo]).toEqual(['SPARK BLANCO', 'DDD 444', 7_000_000, 3_000_000, 4_000_000]);
+  expect((fecha as Date).toISOString().slice(5, 10)).toMatch(/^\d{2}-05$/); // corta los días 5
+  expect([tasa, interes, parte, pct]).toEqual([0.03, 120_000, 100_000, 0.025]);
+  expect(hoja.getCell(`G${n}`).numFmt).toBe('#,##0');
+  expect(hoja.getCell(`H${n}`).numFmt).toBe('d-mmm');
+
+  // TOTAL debajo de la última fila, y las observaciones en el recuadro combinado.
+  let total = n;
+  while (hoja.getCell(`F${total}`).value !== 'TOTAL') total++;
+  expect(hoja.getCell(`G${total}`).value).toMatchObject({ formula: `SUM(G2:G${total - 1})` });
+  expect(hoja.getCell(`B${total + 2}`).value).toBe('OBSERVACIONES: Entra un crédito en noviembre.');
+  expect(hoja.getCell(`K${total + 7}`).isMerged).toBe(true);
   expect(errores).toEqual([]);
 });

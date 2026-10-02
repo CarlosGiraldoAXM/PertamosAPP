@@ -46,6 +46,9 @@ export const cargarSocios = () => api<Socio[]>('GET', '/socios');
 export const crearSocio = (nombre: string) => api<Socio[]>('POST', '/socios', { nombre });
 export const editarSocio = (id: string, cambios: { nombre?: string; activo?: boolean }) => api<Socio[]>('PATCH', `/socios/${id}`, cambios);
 
+export const editarDatosPrestamo = (id: string, datos: { vehiculo: string | null; placa: string | null; notas: string | null }) =>
+  api<PrestamoDatos>('PATCH', `/prestamos/${id}`, datos);
+
 /** Préstamos con su libro completo. Sin filtro trae toda la cartera. */
 export async function cargarPrestamos(filtro: { clienteId?: string } = {}): Promise<PrestamoCompleto[]> {
   const consulta = filtro.clienteId ? `?clienteId=${filtro.clienteId}` : '';

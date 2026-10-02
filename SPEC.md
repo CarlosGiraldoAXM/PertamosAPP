@@ -113,7 +113,7 @@ Definido en `apps/web/migrations`. Tablas `STRICT` (SQLite rechaza valores de ot
 
 - `socios` — dueños de la plata.
 - `clientes` — `documento` único.
-- `prestamos` — capital, tasa, fecha de desembolso, plazo opcional, `estado` (`activo`/`pagado`/`castigado`; el atraso se calcula, no se guarda).
+- `prestamos` — capital, tasa, fecha de desembolso, plazo opcional, `vehiculo` y `placa` (garantía; se pueden corregir siempre), `estado` (`activo`/`pagado`/`castigado`; el atraso se calcula, no se guarda).
 - `prestamo_socios` — parte de la tasa y del capital de cada socio.
 - `pagos` — el libro: `tipo` (`pago`/`liquidacion`/`reverso`), `monto` (negativo en reversos), `reversa_de` único, y **`numero`**: consecutivo del movimiento dentro del préstamo.
 - `aplicaciones` — cómo se imputó cada pago (interés por período, o capital).
@@ -129,6 +129,8 @@ Definido en `apps/web/migrations`. Tablas `STRICT` (SQLite rechaza valores de ot
 - **Sumas de control al cierre:** SQLite no tiene constraints diferidos, así que el Worker inserta una fila de cierre al final de cada transacción y su trigger verifica el conjunto: las tasas y aportes de los socios suman los del préstamo; las aplicaciones suman el monto del pago; el reparto suma cada aplicación, con signos coherentes y solo socios del préstamo. Si algo no cuadra, se revierte toda la transacción.
 
 **Eliminación lógica de clientes.** `clientes.eliminado_en` (fecha y hora, o null). "Eliminar" un cliente solo pone esa marca: él, sus préstamos y sus pagos dejan de existir para la app porque el Worker filtra todas las lecturas (`CLIENTE_VIGENTE` / `PRESTAMO_VIGENTE` en `worker/repo.ts`), y por lo tanto también las operaciones (pagar, liquidar o reversar un préstamo oculto da 404) y los reportes. Nada se borra y el libro sigue intacto; se revierte con "Restaurar". La cédula de un cliente eliminado sigue ocupada: crear otro con la misma devuelve un error que indica restaurarlo.
+
+**Triggers: `BEGIN` y `END` en MAYÚSCULAS.** La API de consultas de D1, que es la que usa `wrangler d1 migrations apply --remote`, solo así reconoce el cuerpo de un trigger; en minúsculas lo corta en el primer `;` y falla con `incomplete input`. La base local los acepta en minúsculas, así que el error solo aparece en producción (por esto la migración 0002 estuvo sin aplicar hasta el 2026-10-01). Hay un test que lo vigila.
 
 **Concurrencia (reemplazo de `FOR UPDATE`).** Dos operaciones simultáneas sobre un préstamo leen N movimientos y ambas calculan el número N+1. La primera entra; la segunda choca, se descarta entera, y el Worker la reintenta leyendo el libro ya actualizado (hasta 3 veces). Hay una prueba que mete un pago justo entre la lectura y la escritura del Worker: sin el consecutivo, esa prueba falla con un doble cobro del mismo mes.
 
@@ -167,7 +169,8 @@ Límite conocido frente a Postgres: la fila de cierre la inserta el Worker; algu
 | `GET /api/clientes` · `GET /:id` · `POST` · `PATCH /:id` | Clientes vigentes |
 | `DELETE /api/clientes/:id` · `POST /:id/restaurar` · `GET /api/clientes?eliminados=1` | Eliminación lógica, restauración y lista de eliminados |
 | `GET /api/prestamos[?clienteId=]` · `GET /:id` | Préstamos con su libro completo (pagos → aplicaciones → reparto) |
-| `POST /api/prestamos` | Crea el préstamo con sus socios; devuelve plan y estado |
+| `POST /api/prestamos` | Crea el préstamo con sus socios (y vehículo/placa); devuelve plan y estado |
+| `PATCH /api/prestamos/:id` | Corrige vehículo, placa y notas (no las condiciones) |
 | `POST /api/prestamos/:id/pagos` | Imputa con `aplicarPago` y guarda el asiento. `simular: true` no guarda |
 | `POST /api/prestamos/:id/liquidacion` | `simular: true` cotiza; para ejecutar exige `montoCotizado`. Marca `pagado` |
 | `POST /api/prestamos/:id/reversos` | Reversa el último movimiento; si reabre un préstamo pagado, vuelve a `activo` |
@@ -193,6 +196,8 @@ Moneda: `$ 1.250.000`. Donde haya cuota redondeada se muestra al lado la exacta,
 
 **Cargar préstamos que ya venían corriendo.** Se crea el préstamo con la fecha real de entrega y se registran los pagos ya hechos, del más viejo al más nuevo. La pantalla de pago tiene un modo "pagos pasados" que propone el corte más antiguo sin pagar con su cuota, y "Guardar y registrar otro" para cargar varios seguidos. Límites: los pagos van en orden de fecha y cada uno debe cubrir al menos el interés vencido a su fecha.
 
+**Informe para el socio** (`/informe`, desde Inicio). Genera el Excel `PAGOS <MES> <AÑO>.xlsx` con la misma estructura de la hoja que se llevaba a mano: columnas A–L (n.º, CLIENTE, VEHICULO, PLACA, PRESTAMO, ABONO A CAP, SALDO, FECHA DE PAGO, TASA INTERES, TOTAL INTERES, <SOCIO>, %), una fila por préstamo activo en el orden en que se registraron, fila TOTAL con la suma de saldos y recuadro de OBSERVACIONES. Se elige el socio del informe y se escriben las observaciones. `ABONO A CAP` lista cada abono a capital; `FECHA DE PAGO` es el próximo corte; `TOTAL INTERES` es un mes de interés sobre el saldo de hoy y la columna del socio su parte. Datos en `src/datos/informeSocio.ts` (con tests), dibujo en `src/lib/excelInformeSocio.ts` (ExcelJS, bajo demanda).
+
 **Estado de cuenta en PDF** (botón en el detalle del préstamo). Documento para el **cliente**: capital que debe hoy, capital abonado, interés pagado, interés atrasado, próximo pago, cuánto cuesta cancelar todo hoy, cada pago con su reparto entre interés y capital y el capital que quedó, y el mes a mes. **No incluye el reparto entre socios** (es interno) ni los pagos reversados. Los datos los arma `src/datos/estadoCuenta.ts` a partir de core (con tests); `src/lib/pdfEstadoCuenta.ts` solo los dibuja con jsPDF, que se carga bajo demanda. Va en dos pasos — generar y luego Compartir/Descargar — porque Safari solo deja abrir el menú de compartir como respuesta directa a un toque.
 
 Pendiente: login, y subir soportes (fotos de cédula y comprobantes) a R2.
@@ -210,6 +215,8 @@ Desde la raíz del repo:
 | `npm run typecheck` | Tipos de la app, el Worker y el motor |
 | `npm run db:migrar:remoto -w @prestamos/web` | Aplica las migraciones a la D1 de producción. **Va antes de subir código que dependa de una migración nueva**: el push a `main` publica solo y no migra |
 | `npm run deploy` | Compila y publica en Cloudflare (requiere `wrangler login` y haber decidido el acceso, §7) |
+
+Reinicio de producción: el 2026-10-01 se vació la base (los datos eran de prueba) y se aplicaron las 4 migraciones; hay un respaldo previo en `docs/respaldos/` (carpeta fuera de git, igual que el Excel de referencia).
 
 Historia: F1–F2 motor · F3–F5 sobre Supabase (Postgres, Edge Functions, RLS) · migración a Cloudflare el 2026-10-01. El código de Supabase está en el historial de git hasta el commit `8fe3935`.
 

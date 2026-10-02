@@ -35,6 +35,19 @@ function asiento(o: {
   };
 }
 
+describe('las migraciones son aptas para producción', () => {
+  it('todo trigger usa BEGIN y END en mayúsculas (D1 remoto corta el cuerpo si van en minúsculas)', () => {
+    const triggers = env.TEST_MIGRATIONS.flatMap((m) => m.queries).filter((q) => /create\s+trigger/i.test(q));
+    expect(triggers.length).toBeGreaterThanOrEqual(15);
+    for (const sql of triggers) {
+      const nombre = /create\s+trigger\s+(\w+)/i.exec(sql)![1];
+      expect(sql, `${nombre}: falta BEGIN en mayúsculas`).toMatch(/\bBEGIN\b/);
+      expect(sql.trimEnd().replace(/;$/, ''), `${nombre}: debe terminar en END en mayúsculas`).toMatch(/\bEND$/);
+      expect(sql, `${nombre}: tiene begin/end en minúsculas`).not.toMatch(/\b(begin|end)\b/);
+    }
+  });
+});
+
 describe('el libro es inmutable', () => {
   it('no se puede modificar ni borrar un pago, una aplicación o un reparto', async () => {
     const { prestamo } = await prestamoNuevo();

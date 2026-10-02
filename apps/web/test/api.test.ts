@@ -261,3 +261,27 @@ describe('eliminar un cliente (eliminación lógica)', () => {
     expect((await pedir('DELETE', '/clientes/20000000-0000-4000-8000-00000000ffff')).status).toBe(404);
   });
 });
+
+describe('vehículo y placa del préstamo', () => {
+  it('se guardan al crear y se pueden corregir aunque el préstamo ya tenga pagos', async () => {
+    const e = await escenario();
+    const r = await pedir('POST', '/prestamos', cuerpoPrestamo(e, { vehiculo: '  Mazda 3 Blanco ', placa: 'FFF 666' }));
+    expect(r.status).toBe(200);
+    const id = r.cuerpo.prestamoId;
+    expect((await libro(id)).fila).toMatchObject({ vehiculo: 'Mazda 3 Blanco', placa: 'FFF 666' });
+
+    await pedir('POST', `/prestamos/${id}/pagos`, { fecha: '2026-02-15', monto: 30_000 });
+    const editado = await pedir('PATCH', `/prestamos/${id}`, { vehiculo: 'Mazda 3 Gris', placa: 'GGG 777', notas: 'Cambió de carro' });
+    expect(editado.status).toBe(200);
+    expect(editado.cuerpo.fila).toMatchObject({ vehiculo: 'Mazda 3 Gris', placa: 'GGG 777', notas: 'Cambió de carro' });
+    // Editar la garantía no toca el libro ni las condiciones.
+    expect(editado.cuerpo.pagos).toHaveLength(1);
+    expect(editado.cuerpo.fila.capital_inicial).toBe(1_000_000);
+  });
+
+  it('son opcionales, y editar un préstamo inexistente da 404', async () => {
+    const { prestamo } = await prestamoNuevo();
+    expect((await libro(prestamo)).fila).toMatchObject({ vehiculo: null, placa: null });
+    expect((await pedir('PATCH', '/prestamos/30000000-0000-4000-8000-00000000ffff', { vehiculo: 'X' })).status).toBe(404);
+  });
+});

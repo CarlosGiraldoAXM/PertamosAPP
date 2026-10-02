@@ -11,3 +11,4 @@ playwright-report/
 .wrangler/
 .dev.vars
 worker-configuration.d.ts
+docs/

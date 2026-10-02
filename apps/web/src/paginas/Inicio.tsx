@@ -69,6 +69,7 @@ function PrimerosPasos({ haySocios, hayClientes }: { haySocios: boolean; hayClie
 export function Inicio() {
   const hoy = hoyBogota();
   const { esAdmin } = useSesion();
+  const navegar = useNavigate();
   const carga = useCarga(async () => {
     const [cartera, socios, clientes] = await Promise.all([cargarPrestamos(), cargarSocios(), cargarClientes()]);
     return { r: resumirCartera(cartera, socios, hoy), sinPrestamos: cartera.length === 0, haySocios: socios.length > 0, hayClientes: clientes.length > 0 };
@@ -161,6 +162,13 @@ export function Inicio() {
               </div>
             </Tarjeta>
           )}
+
+          <Tarjeta titulo="Informe para el socio">
+            <p className="mb-3 text-sm text-slate-600">La hoja de Excel del mes, con cada préstamo, su saldo, el interés y la parte del socio. Lista para imprimir.</p>
+            <Boton variante="secundario" className="w-full" onClick={() => navegar('/informe')}>
+              Ver informe del mes
+            </Boton>
+          </Tarjeta>
 
           <Tarjeta titulo="Desde el inicio">
             <Fila etiqueta="Total prestado">{pesos(r.capitalPrestadoTotal)}</Fila>

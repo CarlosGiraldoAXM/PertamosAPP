@@ -2,14 +2,15 @@ import { analizarLibro } from '@prestamos/core';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useSesion } from '../auth/Sesion.tsx';
-import { cargarPrestamo, cargarSocios, type PagoFila } from '../datos/cartera.ts';
+import { cargarPrestamo, cargarSocios, editarDatosPrestamo, type PagoFila } from '../datos/cartera.ts';
 import { armarEstadoDeCuenta } from '../datos/estadoCuenta.ts';
 import { conEstado } from '../datos/reportes.ts';
 import { useCarga } from '../datos/useCarga.ts';
 import { api } from '../lib/api.ts';
 import { fechaCorta, pesos, porcentaje } from '../lib/formato.ts';
 import { hoyBogota } from '../lib/hoy.ts';
-import { compartir, descargar, generarPdfEstadoDeCuenta, nombreDelArchivo, puedeCompartir } from '../lib/pdfEstadoCuenta.ts';
+import { compartir, descargar, puedeCompartir } from '../lib/archivos.ts';
+import { generarPdfEstadoDeCuenta, nombreDelArchivo } from '../lib/pdfEstadoCuenta.ts';
 import { Aviso, Boton, Campo, Cargando, Cuota, Etiqueta, Fila, Pantalla, Tarjeta } from '../ui/componentes.tsx';
 import { Medidor, TiraDeMeses, type EstadoMes } from '../ui/graficas.tsx';
 import { EtiquetaEstado } from './Prestamos.tsx';
@@ -38,6 +39,8 @@ export function PrestamoDetalle() {
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [generandoPdf, setGenerandoPdf] = useState(false);
+  /** Edición de vehículo y placa; null = no se está editando. */
+  const [garantia, setGarantia] = useState<{ vehiculo: string; placa: string } | null>(null);
   const [pdf, setPdf] = useState<{ blob: Blob; nombre: string } | null>(null);
   const [errorPdf, setErrorPdf] = useState<string | null>(null);
 
@@ -67,6 +70,21 @@ export function PrestamoDetalle() {
       setErrorPdf(err instanceof Error ? err.message : String(err));
     } finally {
       setGenerandoPdf(false);
+    }
+  }
+
+  async function guardarGarantia() {
+    if (!p || !garantia) return;
+    setEnviando(true);
+    setError(null);
+    try {
+      await editarDatosPrestamo(id, { vehiculo: garantia.vehiculo.trim() || null, placa: garantia.placa.trim().toUpperCase() || null, notas: p.fila.notas });
+      setGarantia(null);
+      carga.recargar();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setEnviando(false);
     }
   }
 
@@ -168,6 +186,39 @@ export function PrestamoDetalle() {
               </>
             )}
             {errorPdf && <Aviso>{errorPdf}</Aviso>}
+          </Tarjeta>
+
+          <Tarjeta titulo="Vehículo">
+            {garantia ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <Campo etiqueta="Vehículo" value={garantia.vehiculo} onChange={(ev) => setGarantia({ ...garantia, vehiculo: ev.target.value })} />
+                  <Campo etiqueta="Placa" value={garantia.placa} onChange={(ev) => setGarantia({ ...garantia, placa: ev.target.value })} />
+                </div>
+                <div className="flex gap-2">
+                  <Boton className="flex-1" cargando={enviando} onClick={guardarGarantia}>
+                    Guardar
+                  </Boton>
+                  <Boton variante="secundario" onClick={() => setGarantia(null)}>
+                    Cancelar
+                  </Boton>
+                </div>
+              </div>
+            ) : (
+              <>
+                <Fila etiqueta="Vehículo">{p.fila.vehiculo ?? '—'}</Fila>
+                <Fila etiqueta="Placa">{p.fila.placa ?? '—'}</Fila>
+                {esAdmin && (
+                  <button
+                    type="button"
+                    className="mt-1 text-sm text-slate-500 underline"
+                    onClick={() => setGarantia({ vehiculo: p.fila.vehiculo ?? '', placa: p.fila.placa ?? '' })}
+                  >
+                    Editar vehículo y placa
+                  </button>
+                )}
+              </>
+            )}
           </Tarjeta>
 
           <Tarjeta titulo="Socios">

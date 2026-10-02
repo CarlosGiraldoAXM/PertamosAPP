@@ -3,7 +3,7 @@
 import { autorizar, exigirAdmin, type Acceso } from './acceso.ts';
 import * as entrada from './entrada.ts';
 import { ErrorHttp, json, responderError } from './http.ts';
-import { crearPrestamo, liquidarPrestamo, registrarPago, reversar } from './operaciones.ts';
+import { crearPrestamo, editarDatosPrestamo, liquidarPrestamo, registrarPago, reversar } from './operaciones.ts';
 import { cargarPrestamo, cargarPrestamos, listarClientes, listarClientesEliminados, listarSocios, obtenerCliente } from './repo.ts';
 
 function noEncontrado(): never {
@@ -121,6 +121,7 @@ async function enrutar(request: Request, env: Env, acceso: Acceso): Promise<unkn
       }
       if (id === undefined && metodo === 'POST') return crearPrestamo(db, await cuerpo());
       if (id !== undefined && accion === undefined && metodo === 'GET') return cargarPrestamo(db, idDeRuta(id));
+      if (id !== undefined && accion === undefined && metodo === 'PATCH') return editarDatosPrestamo(db, idDeRuta(id), await cuerpo());
       if (id !== undefined && metodo === 'POST') {
         if (accion === 'pagos') return registrarPago(db, idDeRuta(id), await cuerpo());
         if (accion === 'liquidacion') return liquidarPrestamo(db, idDeRuta(id), await cuerpo());

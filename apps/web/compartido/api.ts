@@ -37,6 +37,9 @@ export interface PrestamoFila {
   plazo_meses: number | null;
   estado: 'activo' | 'pagado' | 'castigado';
   notas: string | null;
+  /** Garantía: el vehículo y su placa, como van en el informe para el socio. */
+  vehiculo: string | null;
+  placa: string | null;
   created_at: string;
   socios: { socio_id: string; tasa_bp: number; aporte_capital: number }[];
 }
