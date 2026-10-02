@@ -128,6 +128,8 @@ Definido en `apps/web/migrations`. Tablas `STRICT` (SQLite rechaza valores de ot
 - **Consecutivo sin huecos:** `pagos.numero` debe ser exactamente el siguiente del préstamo (`unique` + trigger).
 - **Sumas de control al cierre:** SQLite no tiene constraints diferidos, así que el Worker inserta una fila de cierre al final de cada transacción y su trigger verifica el conjunto: las tasas y aportes de los socios suman los del préstamo; las aplicaciones suman el monto del pago; el reparto suma cada aplicación, con signos coherentes y solo socios del préstamo. Si algo no cuadra, se revierte toda la transacción.
 
+**Eliminación lógica de clientes.** `clientes.eliminado_en` (fecha y hora, o null). "Eliminar" un cliente solo pone esa marca: él, sus préstamos y sus pagos dejan de existir para la app porque el Worker filtra todas las lecturas (`CLIENTE_VIGENTE` / `PRESTAMO_VIGENTE` en `worker/repo.ts`), y por lo tanto también las operaciones (pagar, liquidar o reversar un préstamo oculto da 404) y los reportes. Nada se borra y el libro sigue intacto; se revierte con "Restaurar". La cédula de un cliente eliminado sigue ocupada: crear otro con la misma devuelve un error que indica restaurarlo.
+
 **Concurrencia (reemplazo de `FOR UPDATE`).** Dos operaciones simultáneas sobre un préstamo leen N movimientos y ambas calculan el número N+1. La primera entra; la segunda choca, se descarta entera, y el Worker la reintenta leyendo el libro ya actualizado (hasta 3 veces). Hay una prueba que mete un pago justo entre la lectura y la escritura del Worker: sin el consecutivo, esa prueba falla con un doble cobro del mismo mes.
 
 Límite conocido frente a Postgres: la fila de cierre la inserta el Worker; alguien que escriba directo en D1 podría omitirla. Las demás invariantes se cumplen aunque se escriba por fuera de la app.
@@ -162,7 +164,8 @@ Límite conocido frente a Postgres: la fila de cierre la inserta el Worker; algu
 | Método y ruta | Qué hace |
 |---|---|
 | `GET /api/socios` · `POST` · `PATCH /:id` | Lista, crea, renombra o activa/desactiva socios |
-| `GET /api/clientes` · `GET /:id` · `POST` · `PATCH /:id` | Clientes |
+| `GET /api/clientes` · `GET /:id` · `POST` · `PATCH /:id` | Clientes vigentes |
+| `DELETE /api/clientes/:id` · `POST /:id/restaurar` · `GET /api/clientes?eliminados=1` | Eliminación lógica, restauración y lista de eliminados |
 | `GET /api/prestamos[?clienteId=]` · `GET /:id` | Préstamos con su libro completo (pagos → aplicaciones → reparto) |
 | `POST /api/prestamos` | Crea el préstamo con sus socios; devuelve plan y estado |
 | `POST /api/prestamos/:id/pagos` | Imputa con `aplicarPago` y guarda el asiento. `simular: true` no guarda |
@@ -205,6 +208,7 @@ Desde la raíz del repo:
 | `npm test` | Motor (90) + Worker y base (20) |
 | `npm run test:e2e` | Navegador (Edge) contra una base vacía propia |
 | `npm run typecheck` | Tipos de la app, el Worker y el motor |
+| `npm run db:migrar:remoto -w @prestamos/web` | Aplica las migraciones a la D1 de producción. **Va antes de subir código que dependa de una migración nueva**: el push a `main` publica solo y no migra |
 | `npm run deploy` | Compila y publica en Cloudflare (requiere `wrangler login` y haber decidido el acceso, §7) |
 
 Historia: F1–F2 motor · F3–F5 sobre Supabase (Postgres, Edge Functions, RLS) · migración a Cloudflare el 2026-10-01. El código de Supabase está en el historial de git hasta el commit `8fe3935`.

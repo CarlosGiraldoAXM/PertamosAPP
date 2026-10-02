@@ -1,5 +1,5 @@
 // Lecturas de D1. Solo arma filas; ningún cálculo financiero vive acá.
-import type { Cliente, PagoFila, PrestamoDatos, PrestamoFila, Socio } from '../compartido/api.ts';
+import type { Cliente, ClienteEliminado, PagoFila, PrestamoDatos, PrestamoFila, Socio } from '../compartido/api.ts';
 import { ErrorHttp } from './http.ts';
 
 export async function listarSocios(db: D1Database): Promise<Socio[]> {
@@ -9,13 +9,32 @@ export async function listarSocios(db: D1Database): Promise<Socio[]> {
 
 const COLUMNAS_CLIENTE = 'id, nombre, documento, telefono, direccion, notas';
 
+// Un cliente eliminado (eliminación lógica) no existe para la app: ni él, ni sus
+// préstamos, ni sus pagos. Toda lectura pasa por estas condiciones.
+const CLIENTE_VIGENTE = 'eliminado_en is null';
+const PRESTAMO_VIGENTE = `p.cliente_id in (select id from clientes where ${CLIENTE_VIGENTE})`;
+
 export async function listarClientes(db: D1Database): Promise<Cliente[]> {
-  const { results } = await db.prepare(`select ${COLUMNAS_CLIENTE} from clientes order by nombre collate nocase, id`).all<Cliente>();
+  const { results } = await db
+    .prepare(`select ${COLUMNAS_CLIENTE} from clientes where ${CLIENTE_VIGENTE} order by nombre collate nocase, id`)
+    .all<Cliente>();
+  return results;
+}
+
+/** Los eliminados, del más reciente al más antiguo, para poder restaurarlos. */
+export async function listarClientesEliminados(db: D1Database): Promise<ClienteEliminado[]> {
+  const { results } = await db
+    .prepare(
+      `select c.id, c.nombre, c.documento, c.eliminado_en,
+              (select count(*) from prestamos p where p.cliente_id = c.id) as prestamos
+       from clientes c where c.eliminado_en is not null order by c.eliminado_en desc, c.id`,
+    )
+    .all<ClienteEliminado>();
   return results;
 }
 
 export async function obtenerCliente(db: D1Database, id: string): Promise<Cliente> {
-  const cliente = await db.prepare(`select ${COLUMNAS_CLIENTE} from clientes where id = ?`).bind(id).first<Cliente>();
+  const cliente = await db.prepare(`select ${COLUMNAS_CLIENTE} from clientes where id = ? and ${CLIENTE_VIGENTE}`).bind(id).first<Cliente>();
   if (!cliente) throw new ErrorHttp(404, 'CLIENTE_NO_EXISTE', `No existe el cliente ${id}`);
   return cliente;
 }
@@ -28,8 +47,9 @@ type Filtro = { prestamoId: string } | { clienteId: string } | Record<string, ne
  */
 export async function cargarPrestamos(db: D1Database, filtro: Filtro = {}): Promise<PrestamoDatos[]> {
   // El filtro sale de una lista fija de condiciones; el valor siempre va enlazado.
-  const [donde, valor] =
-    'prestamoId' in filtro ? ['where p.id = ?1', filtro.prestamoId] : 'clienteId' in filtro ? ['where p.cliente_id = ?1', filtro.clienteId] : ['', null];
+  const [condicion, valor] =
+    'prestamoId' in filtro ? ['and p.id = ?1', filtro.prestamoId] : 'clienteId' in filtro ? ['and p.cliente_id = ?1', filtro.clienteId] : ['', null];
+  const donde = `where ${PRESTAMO_VIGENTE} ${condicion}`;
   const q = (sql: string) => (valor === null ? db.prepare(sql) : db.prepare(sql).bind(valor));
 
   const [prestamos, socios, pagos, aplicaciones, repartos] = await db.batch([

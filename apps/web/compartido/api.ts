@@ -11,6 +11,15 @@ export interface Cliente {
   notas: string | null;
 }
 
+/** Un cliente oculto por eliminación lógica; conserva todo su historial. */
+export interface ClienteEliminado {
+  id: string;
+  nombre: string;
+  documento: string | null;
+  eliminado_en: string;
+  prestamos: number;
+}
+
 export interface Socio {
   id: string;
   nombre: string;

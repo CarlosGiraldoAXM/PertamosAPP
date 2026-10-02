@@ -131,7 +131,7 @@ export async function crearPrestamo(db: D1Database, e: entrada.Objeto) {
     throw new ErrorNegocio('FECHA_FUTURA', `El desembolso (${prestamo.fechaDesembolso}) no puede ser posterior a hoy (${hoy})`);
   }
 
-  const cliente = await db.prepare('select id from clientes where id = ?').bind(clienteId).first();
+  const cliente = await db.prepare('select id from clientes where id = ? and eliminado_en is null').bind(clienteId).first();
   if (!cliente) throw new ErrorHttp(404, 'CLIENTE_NO_EXISTE', `No existe el cliente ${clienteId}`);
   const ids = prestamo.socios.map((s) => s.socioId);
   const activos = await db

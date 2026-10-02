@@ -1,9 +1,17 @@
 // Lecturas y escrituras contra la API, y su traducción a los tipos de core.
 import type { Movimiento, Prestamo } from '@prestamos/core';
-import { aCore, type Cliente, type PagoFila, type PrestamoDatos, type PrestamoFila, type Socio } from '../../compartido/api.ts';
+import {
+  aCore,
+  type Cliente,
+  type ClienteEliminado,
+  type PagoFila,
+  type PrestamoDatos,
+  type PrestamoFila,
+  type Socio,
+} from '../../compartido/api.ts';
 import { api, ErrorApi } from '../lib/api.ts';
 
-export type { Cliente, PagoFila, PrestamoFila, Socio };
+export type { Cliente, ClienteEliminado, PagoFila, PrestamoFila, Socio };
 
 /** Un préstamo con todo lo necesario para calcular su estado con core. */
 export interface PrestamoCompleto extends PrestamoDatos {
@@ -28,6 +36,11 @@ export const cargarClientes = () => api<Cliente[]>('GET', '/clientes');
 export const cargarCliente = (id: string) => oNull(api<Cliente>('GET', `/clientes/${id}`));
 export const guardarCliente = (datos: Omit<Cliente, 'id'>, id?: string) =>
   id ? api<Cliente>('PATCH', `/clientes/${id}`, datos) : api<Cliente>('POST', '/clientes', datos);
+
+/** Eliminación lógica: el cliente y sus préstamos dejan de verse, pero nada se borra. */
+export const eliminarCliente = (id: string) => api<{ eliminado: true }>('DELETE', `/clientes/${id}`);
+export const cargarClientesEliminados = () => api<ClienteEliminado[]>('GET', '/clientes?eliminados=1');
+export const restaurarCliente = (id: string) => api<Cliente>('POST', `/clientes/${id}/restaurar`);
 
 export const cargarSocios = () => api<Socio[]>('GET', '/socios');
 export const crearSocio = (nombre: string) => api<Socio[]>('POST', '/socios', { nombre });

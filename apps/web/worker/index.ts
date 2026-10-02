@@ -4,7 +4,7 @@ import { autorizar, exigirAdmin, type Acceso } from './acceso.ts';
 import * as entrada from './entrada.ts';
 import { ErrorHttp, json, responderError } from './http.ts';
 import { crearPrestamo, liquidarPrestamo, registrarPago, reversar } from './operaciones.ts';
-import { cargarPrestamo, cargarPrestamos, listarClientes, listarSocios, obtenerCliente } from './repo.ts';
+import { cargarPrestamo, cargarPrestamos, listarClientes, listarClientesEliminados, listarSocios, obtenerCliente } from './repo.ts';
 
 function noEncontrado(): never {
   throw new ErrorHttp(404, 'RUTA_NO_EXISTE', 'Ruta no encontrada');
@@ -48,10 +48,26 @@ async function guardarCliente(sentencia: D1PreparedStatement, valores: (string |
     await sentencia.bind(...valores).run();
   } catch (e) {
     if (e instanceof Error && e.message.includes('clientes.documento')) {
-      throw new ErrorHttp(409, 'DOCUMENTO_DUPLICADO', 'Ya existe un cliente con ese documento');
+      throw new ErrorHttp(409, 'DOCUMENTO_DUPLICADO', 'Ya existe un cliente con ese documento. Si lo eliminaste, restáuralo desde "Clientes eliminados".');
     }
     throw e;
   }
+}
+
+/** Eliminación lógica: marca al cliente; sus préstamos y pagos quedan ocultos con él. Nada se borra. */
+async function eliminarCliente(db: D1Database, id: string) {
+  const r = await db
+    .prepare("update clientes set eliminado_en = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') where id = ? and eliminado_en is null")
+    .bind(id)
+    .run();
+  if (r.meta.changes === 0) throw new ErrorHttp(404, 'CLIENTE_NO_EXISTE', `No existe el cliente ${id}`);
+  return { eliminado: true };
+}
+
+async function restaurarCliente(db: D1Database, id: string) {
+  const r = await db.prepare('update clientes set eliminado_en = null where id = ? and eliminado_en is not null').bind(id).run();
+  if (r.meta.changes === 0) throw new ErrorHttp(404, 'CLIENTE_NO_EXISTE', `No hay un cliente eliminado con id ${id}`);
+  return obtenerCliente(db, id);
 }
 
 async function crearSocio(db: D1Database, e: entrada.Objeto) {
@@ -89,8 +105,10 @@ async function enrutar(request: Request, env: Env, acceso: Acceso): Promise<unkn
       break;
 
     case 'clientes':
+      if (id !== undefined && accion === 'restaurar' && metodo === 'POST') return restaurarCliente(db, idDeRuta(id));
       if (accion !== undefined) noEncontrado();
-      if (id === undefined && metodo === 'GET') return listarClientes(db);
+      if (id === undefined && metodo === 'GET') return url.searchParams.has('eliminados') ? listarClientesEliminados(db) : listarClientes(db);
+      if (id !== undefined && metodo === 'DELETE') return eliminarCliente(db, idDeRuta(id));
       if (id === undefined && metodo === 'POST') return crearCliente(db, await cuerpo());
       if (id !== undefined && metodo === 'GET') return obtenerCliente(db, idDeRuta(id));
       if (id !== undefined && metodo === 'PATCH') return editarCliente(db, idDeRuta(id), await cuerpo());

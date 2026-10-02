@@ -168,3 +168,58 @@ test('préstamo que ya venía corriendo: cargar pagos pasados y adelantar el pr�
   await expect(page.getByText('Al día')).toBeVisible();
   expect(errores).toEqual([]);
 });
+
+test('eliminar un cliente lo oculta con sus préstamos, y se puede restaurar', async ({ page }) => {
+  const errores = registrarErrores(page);
+  const pedir = async (ruta: string, cuerpo: unknown) => (await page.request.post(`/api${ruta}`, { data: cuerpo })).json();
+  const socios = await pedir('/socios', { nombre: `Socio borrado ${Date.now()}` });
+  const socio = socios.find((s: { nombre: string }) => s.nombre.startsWith('Socio borrado'));
+  const cliente = await pedir('/clientes', { nombre: 'Elena Para Borrar' });
+  const { prestamoId } = await pedir('/prestamos', {
+    clienteId: cliente.id,
+    capital: 700_000,
+    tasaMensualBp: 300,
+    fechaDesembolso: '2026-09-20',
+    plazoMeses: null,
+    socios: [{ socioId: socio.id, tasaBp: 300, aporteCapital: 700_000 }],
+  });
+
+  await page.goto(`/clientes/${cliente.id}`);
+  await expect(page.getByRole('heading', { name: 'Elena Para Borrar' })).toBeVisible();
+
+  // La confirmación avisa que todavía debe plata; cancelar no hace nada.
+  await page.getByRole('button', { name: 'Eliminar cliente' }).click();
+  await expect(page.getByText('Todavía debe $ 700.000 en 1 préstamo activo.')).toBeVisible();
+  await page.getByRole('button', { name: 'Cancelar' }).click();
+  await expect(page.getByText('¿Eliminar este cliente?')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Eliminar cliente' }).click();
+  await page.getByRole('button', { name: 'Sí, eliminar' }).click();
+
+  // Vuelve a la lista y ya no está, ni en Préstamos.
+  await expect(page.getByRole('heading', { name: 'Clientes' })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Elena Para Borrar/ })).toHaveCount(0);
+  await page.getByRole('link', { name: /Préstamos/ }).click();
+  await expect(page.getByRole('heading', { name: 'Préstamos' })).toBeVisible();
+  await expect(page.getByText('Elena Para Borrar')).toHaveCount(0);
+
+  // Entrar por la dirección directa al préstamo tampoco lo muestra.
+  errores.length = 0;
+  await page.goto(`/prestamos/${prestamoId}`);
+  await expect(page.getByText('No existe el préstamo.')).toBeVisible();
+  // El único error esperado es el 404 de ese préstamo (en desarrollo React lo pide dos veces).
+  expect(errores.length).toBeGreaterThan(0);
+  expect(new Set(errores)).toEqual(new Set([`404 GET http://127.0.0.1:5174/api/prestamos/${prestamoId}`]));
+  errores.length = 0;
+
+  // Restaurar desde la lista de eliminados.
+  await page.getByRole('link', { name: /Clientes/ }).click();
+  await page.getByRole('button', { name: /Clientes eliminados \(\d+\)/ }).click();
+  await expect(page.getByText('Elena Para Borrar')).toBeVisible();
+  await page.getByRole('button', { name: 'Restaurar' }).click();
+  await expect(page.getByRole('link', { name: /Elena Para Borrar/ })).toBeVisible();
+  await page.goto(`/prestamos/${prestamoId}`);
+  await expect(page.getByRole('heading', { name: 'Elena Para Borrar' })).toBeVisible();
+  await expect(page.getByText('$ 700.000').first()).toBeVisible();
+  expect(errores).toEqual([]);
+});

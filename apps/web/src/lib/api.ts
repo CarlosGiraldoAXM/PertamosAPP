@@ -10,7 +10,7 @@ export class ErrorApi extends Error {
 }
 
 /** Llama a la API del Worker (mismo origen que la app) y traduce sus errores a mensajes legibles. */
-export async function api<T>(metodo: 'GET' | 'POST' | 'PATCH', ruta: string, cuerpo?: unknown): Promise<T> {
+export async function api<T>(metodo: 'GET' | 'POST' | 'PATCH' | 'DELETE', ruta: string, cuerpo?: unknown): Promise<T> {
   let r: Response;
   try {
     r = await fetch(`/api${ruta}`, {

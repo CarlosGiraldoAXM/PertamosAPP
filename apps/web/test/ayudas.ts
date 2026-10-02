@@ -9,7 +9,7 @@ export interface Respuesta<T = any> {
 }
 
 /** Llama a la API del Worker tal como lo haría el navegador. */
-export async function pedir<T = any>(metodo: 'GET' | 'POST' | 'PATCH', ruta: string, cuerpo?: unknown): Promise<Respuesta<T>> {
+export async function pedir<T = any>(metodo: 'GET' | 'POST' | 'PATCH' | 'DELETE', ruta: string, cuerpo?: unknown): Promise<Respuesta<T>> {
   const r = await exports.default.fetch(
     new Request(`http://prestamos.test/api${ruta}`, {
       method: metodo,

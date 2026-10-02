@@ -1,6 +1,6 @@
 // La API de punta a punta, dentro del runtime de Workers con D1 local.
 import { describe, expect, it } from 'vitest';
-import { cuerpoPrestamo, escenario, libro, pedir, prestamoNuevo } from './ayudas.ts';
+import { cuerpoPrestamo, db, escenario, libro, pedir, prestamoNuevo } from './ayudas.ts';
 
 describe('clientes y socios', () => {
   it('crea, lista y edita clientes', async () => {
@@ -179,5 +179,85 @@ describe('ciclo de vida de un préstamo', () => {
     expect(delCliente.cuerpo.map((d: { fila: { id: string } }) => d.fila.id)).toEqual([prestamo]);
     const todos = await pedir('GET', '/prestamos');
     expect(todos.cuerpo.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('eliminar un cliente (eliminación lógica)', () => {
+  const contar = (tabla: string, donde: string, valor: string) =>
+    db.prepare(`select count(*) as n from ${tabla} where ${donde}`).bind(valor).first<number>('n');
+
+  it('lo oculta junto con sus préstamos y pagos en todas las lecturas y operaciones, sin borrar nada de la base', async () => {
+    const { prestamo, cliente } = await prestamoNuevo();
+    await pedir('POST', `/prestamos/${prestamo}/pagos`, { fecha: '2026-02-15', monto: 30_000 });
+    const control = await prestamoNuevo(); // otro cliente, que no debe verse afectado
+
+    const r = await pedir('DELETE', `/clientes/${cliente}`);
+    expect(r.status).toBe(200);
+
+    // Lecturas: desaparece de todas.
+    const ids = (lista: { id: string }[]) => lista.map((x) => x.id);
+    expect(ids((await pedir('GET', '/clientes')).cuerpo)).not.toContain(cliente);
+    expect(ids((await pedir('GET', '/clientes')).cuerpo)).toContain(control.cliente);
+    expect((await pedir('GET', `/clientes/${cliente}`)).status).toBe(404);
+    expect((await pedir('GET', `/prestamos?clienteId=${cliente}`)).cuerpo).toEqual([]);
+    expect((await pedir('GET', `/prestamos/${prestamo}`)).status).toBe(404);
+    const cartera = (await pedir('GET', '/prestamos')).cuerpo.map((d: { fila: { id: string } }) => d.fila.id);
+    expect(cartera).not.toContain(prestamo);
+    expect(cartera).toContain(control.prestamo);
+
+    // Operaciones: no se puede mover plata de un préstamo oculto ni crearle otro al cliente.
+    expect((await pedir('POST', `/prestamos/${prestamo}/pagos`, { fecha: '2026-03-15', monto: 30_000 })).status).toBe(404);
+    expect((await pedir('POST', `/prestamos/${prestamo}/liquidacion`, { simular: true })).status).toBe(404);
+    const pagoId = await db.prepare('select id from pagos where prestamo_id = ?').bind(prestamo).first<string>('id');
+    expect((await pedir('POST', `/prestamos/${prestamo}/reversos`, { pagoId })).status).toBe(404);
+    expect((await pedir('PATCH', `/clientes/${cliente}`, { nombre: 'Otro nombre' })).status).toBe(404);
+    const e = await escenario();
+    expect((await pedir('POST', '/prestamos', cuerpoPrestamo({ ...e, cliente }))).status).toBe(404);
+
+    // La base: todo sigue ahí, solo cambió la marca del cliente.
+    expect(await contar('clientes', 'id = ?1 and eliminado_en is not null', cliente)).toBe(1);
+    expect(await contar('prestamos', 'cliente_id = ?1', cliente)).toBe(1);
+    expect(await contar('prestamo_socios', 'prestamo_id = ?1', prestamo)).toBe(2);
+    expect(await contar('pagos', 'prestamo_id = ?1', prestamo)).toBe(1);
+    expect(await contar('aplicaciones', 'pago_id = ?1', pagoId!)).toBe(1);
+    expect(await contar('reparto_socios', 'aplicacion_id in (select id from aplicaciones where pago_id = ?1)', pagoId!)).toBe(2);
+  });
+
+  it('se puede restaurar y vuelve con todo su historial', async () => {
+    const { prestamo, cliente } = await prestamoNuevo();
+    await pedir('POST', `/prestamos/${prestamo}/pagos`, { fecha: '2026-02-15', monto: 30_000 });
+    await pedir('DELETE', `/clientes/${cliente}`);
+
+    const eliminados = (await pedir('GET', '/clientes?eliminados=1')).cuerpo;
+    const fila = eliminados.find((c: { id: string }) => c.id === cliente);
+    expect(fila).toMatchObject({ prestamos: 1 });
+    expect(fila.eliminado_en).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+
+    const r = await pedir('POST', `/clientes/${cliente}/restaurar`);
+    expect(r.status).toBe(200);
+    expect(r.cuerpo.id).toBe(cliente);
+    const d = await libro(prestamo);
+    expect(d.pagos).toHaveLength(1);
+    expect(d.pagos[0]!.monto).toBe(30_000);
+    expect((await pedir('GET', '/clientes?eliminados=1')).cuerpo.some((c: { id: string }) => c.id === cliente)).toBe(false);
+    // Y vuelve a recibir pagos.
+    expect((await pedir('POST', `/prestamos/${prestamo}/pagos`, { fecha: '2026-03-15', monto: 30_000 })).status).toBe(200);
+  });
+
+  it('la cédula de un cliente eliminado sigue ocupada: el error indica restaurarlo', async () => {
+    const documento = `elim-${Date.now()}`;
+    const c = await pedir('POST', '/clientes', { nombre: 'Uno', documento });
+    await pedir('DELETE', `/clientes/${c.cuerpo.id}`);
+    const r = await pedir('POST', '/clientes', { nombre: 'Dos', documento });
+    expect(r.status).toBe(409);
+    expect(r.cuerpo.error.mensaje).toContain('restáuralo');
+  });
+
+  it('eliminar dos veces, eliminar uno inexistente o restaurar uno vigente → 404', async () => {
+    const { cliente } = await escenario();
+    expect((await pedir('POST', `/clientes/${cliente}/restaurar`)).status).toBe(404);
+    expect((await pedir('DELETE', `/clientes/${cliente}`)).status).toBe(200);
+    expect((await pedir('DELETE', `/clientes/${cliente}`)).status).toBe(404);
+    expect((await pedir('DELETE', '/clientes/20000000-0000-4000-8000-00000000ffff')).status).toBe(404);
   });
 });
