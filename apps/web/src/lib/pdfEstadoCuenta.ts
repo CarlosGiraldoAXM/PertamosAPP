@@ -17,7 +17,7 @@ const GRIS: [number, number, number] = [100, 116, 139];
 const FONDO: [number, number, number] = [241, 245, 249];
 const ROJO: [number, number, number] = [185, 28, 28];
 
-const ESTADO_MES = { pagado: 'Pagado', vencido: 'Pendiente', curso: 'En curso' } as const;
+const ESTADO_MES = { pagado: 'Pagado', adelantado: 'Adelantado', vencido: 'Pendiente', curso: 'En curso' } as const;
 
 export async function generarPdfEstadoDeCuenta(ec: EstadoDeCuenta): Promise<Blob> {
   // Se carga solo al pedir el PDF, para no pesar en el arranque de la app.
@@ -91,6 +91,7 @@ export async function generarPdfEstadoDeCuenta(ec: EstadoDeCuenta): Promise<Blob
     const meses = `${ec.mesesAtrasados} ${ec.mesesAtrasados === 1 ? 'mes' : 'meses'}`;
     renglon(`Interés atrasado (${meses} sin pagar)`, pesos(ec.interesVencido), { color: ROJO });
   }
+  if (ec.interesPagadoHasta) renglon('Interés pagado por adelantado hasta', fechaCorta(ec.interesPagadoHasta));
   if (ec.proximoPago) {
     const que = ec.proximoPago.incluyeCapital ? ' (interés del mes + todo el capital, por plazo cumplido)' : '';
     renglon(`Próximo pago: ${fechaCorta(ec.proximoPago.fecha)}${que}`, pesos(ec.proximoPago.monto));

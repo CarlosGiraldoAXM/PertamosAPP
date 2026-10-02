@@ -73,6 +73,14 @@ export function booleanoOpcional(o: Objeto, campo: string): boolean | null {
   return v;
 }
 
+/** Uno de los valores permitidos; si no viene, el primero. */
+export function opcion<T extends string>(o: Objeto, campo: string, valores: readonly [T, ...T[]]): T {
+  const v = o[campo];
+  if (v === undefined || v === null) return valores[0];
+  if (typeof v !== 'string' || !valores.includes(v as T)) throw invalida(`"${campo}" debe ser uno de: ${valores.join(', ')}`);
+  return v as T;
+}
+
 export function lista(o: Objeto, campo: string): Objeto[] {
   const v = o[campo];
   if (!Array.isArray(v) || v.some((x) => typeof x !== 'object' || x === null || Array.isArray(x))) {

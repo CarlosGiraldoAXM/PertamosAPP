@@ -147,6 +147,30 @@ describe('ciclo de vida de un préstamo', () => {
     expect((await libro(prestamo)).fila.estado).toBe('activo');
   });
 
+  it('adelantar meses: el sobrante paga los meses siguientes y no baja el capital', async () => {
+    const { prestamo } = await prestamoNuevo();
+    const ruta = `/prestamos/${prestamo}/pagos`;
+    // 10-feb: corre el mes 1. 90.000 = tres meses de interés.
+    const r = await pedir('POST', ruta, { fecha: '2026-02-10', monto: 90_000, sobrante: 'adelantar' });
+    expect(r.status).toBe(200);
+    expect(r.cuerpo.movimiento.aplicaciones.map((a: { periodo: number | null; aInteres: number }) => [a.periodo, a.aInteres])).toEqual([
+      [1, 30_000],
+      [2, 30_000],
+      [3, 30_000],
+    ]);
+    expect(r.cuerpo.estado.saldoCapital).toBe(1_000_000);
+    const d = await libro(prestamo);
+    expect(d.pagos[0]!.aplicaciones.map((a) => a.periodo)).toEqual([1, 2, 3]);
+
+    // Sin la opción, el mismo sobrante va a capital (comportamiento por defecto).
+    const otro = await prestamoNuevo();
+    const porDefecto = await pedir('POST', `/prestamos/${otro.prestamo}/pagos`, { fecha: '2026-02-10', monto: 90_000 });
+    expect(porDefecto.cuerpo.estado.saldoCapital).toBe(940_000);
+
+    const invalido = await pedir('POST', ruta, { fecha: '2026-02-20', monto: 30_000, sobrante: 'regalar' });
+    expect(invalido.status).toBe(400);
+  });
+
   it('GET /prestamos trae la cartera y filtra por cliente', async () => {
     const { prestamo, cliente } = await prestamoNuevo();
     const delCliente = await pedir('GET', `/prestamos?clienteId=${cliente}`);

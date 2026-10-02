@@ -113,7 +113,14 @@ export function PrestamoNuevo() {
               />
               <CampoPesos etiqueta="Capital" valor={capital} onCambio={setCapital} autoFocus />
               <Campo etiqueta="Tasa mensual (%)" inputMode="decimal" placeholder="3" value={tasa} onChange={(e) => setTasa(e.target.value)} />
-              <Campo etiqueta="Fecha de desembolso" type="date" max={hoy} value={fecha} onChange={(e) => setFecha(e.target.value)} />
+              <Campo
+                etiqueta="Fecha de desembolso"
+                type="date"
+                max={hoy}
+                value={fecha}
+                onChange={(e) => setFecha(e.target.value)}
+                ayuda="Si el préstamo ya venía corriendo, pon la fecha real en que entregaste la plata. Después registras los pagos que ya te hicieron."
+              />
               <Campo
                 etiqueta="Plazo en meses (opcional)"
                 inputMode="numeric"

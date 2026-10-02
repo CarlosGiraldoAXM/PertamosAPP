@@ -82,9 +82,13 @@ Todo corre en **Cloudflare** (se migró desde Supabase el 2026-10-01).
 
 1. Interés de períodos **vencidos** no pagados (`corte(j) ≤ f`), del más antiguo al más nuevo. Si el pago no alcanza → error.
 2. Interés del período en curso `k` completo (regla "mes completo"). Si no alcanza, queda parcial.
-3. El resto a capital. Si excede el saldo → error (el cliente pagaría de más).
+3. El sobrante, según lo que se elija al registrar el pago (`sobrante`):
+   - `capital` (por defecto): baja la deuda. Si excede el saldo → error (el cliente pagaría de más).
+   - `adelantar`: paga el interés de los meses siguientes, en orden, calculado sobre el saldo de hoy. Si no alcanza para un mes entero, ese mes queda pagado en parte. Con plazo no se adelanta más allá del plazo; lo que quede va a capital.
 
 El capital abonado reduce el interés a partir del período `k+1`.
+
+**Meses adelantados y abonos posteriores.** Un mes nunca vale menos que lo ya pagado por él: si el cliente adelantó meses y después abona a capital, los meses adelantados quedan como están y el abono baja el interés desde el primer mes sin pagar. No se devuelve interés (tampoco al cancelar todo). El estado salta los meses adelantados: `proximoCorte` es el primer corte futuro que aún debe algo e `interesPagadoHasta` indica hasta qué corte está cubierto.
 
 Reglas adicionales:
 - Un pago hecho el mismo día de un corte paga ese mes (ya vencido); no adelanta el mes siguiente: el sobrante va a capital.
@@ -183,6 +187,8 @@ Mobile-first (`apps/web/src`). Pantallas: Inicio (atrasados, cortes de la semana
 Moneda: `$ 1.250.000`. Donde haya cuota redondeada se muestra al lado la exacta, ej. **$ 38.000** (exacta $ 37.037).
 
 **Gráficas** (`src/ui/graficas.tsx`, SVG/HTML propios, sin librerías): cifra principal, columnas de interés cobrado por mes (se toca un mes para ver su valor), medidor del cobro del mes, barras partidas de cartera al día/atrasada y de capital por socio, y una tira con un cuadrito por mes en el detalle del préstamo. Reglas: el color nunca es el único canal (siempre hay texto o símbolo: verde y rojo no se distinguen con daltonismo), los valores exactos se ven sin tooltip, y cada gráfica tiene su equivalente en texto. La paleta se validó con el script de la guía de visualización sobre el blanco de las tarjetas.
+
+**Cargar préstamos que ya venían corriendo.** Se crea el préstamo con la fecha real de entrega y se registran los pagos ya hechos, del más viejo al más nuevo. La pantalla de pago tiene un modo "pagos pasados" que propone el corte más antiguo sin pagar con su cuota, y "Guardar y registrar otro" para cargar varios seguidos. Límites: los pagos van en orden de fecha y cada uno debe cubrir al menos el interés vencido a su fecha.
 
 **Estado de cuenta en PDF** (botón en el detalle del préstamo). Documento para el **cliente**: capital que debe hoy, capital abonado, interés pagado, interés atrasado, próximo pago, cuánto cuesta cancelar todo hoy, cada pago con su reparto entre interés y capital y el capital que quedó, y el mes a mes. **No incluye el reparto entre socios** (es interno) ni los pagos reversados. Los datos los arma `src/datos/estadoCuenta.ts` a partir de core (con tests); `src/lib/pdfEstadoCuenta.ts` solo los dibuja con jsPDF, que se carga bajo demanda. Va en dos pasos — generar y luego Compartir/Descargar — porque Safari solo deja abrir el menú de compartir como respuesta directa a un toque.
 

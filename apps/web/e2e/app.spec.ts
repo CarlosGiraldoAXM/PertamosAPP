@@ -121,3 +121,50 @@ test('una dirección interna abierta directamente carga la app (SPA)', async ({ 
   await expect(page.getByRole('heading', { name: 'Clientes' })).toBeVisible();
   expect(errores).toEqual([]);
 });
+
+test('préstamo que ya venía corriendo: cargar pagos pasados y adelantar meses', async ({ page }) => {
+  const errores = registrarErrores(page);
+  // Préstamo de $1.000.000 al 3 % entregado el 10-jun-2026 (hace meses), creado por la API.
+  const pedir = async (ruta: string, cuerpo: unknown) => (await page.request.post(`/api${ruta}`, { data: cuerpo })).json();
+  const socios = await pedir('/socios', { nombre: `Socio historia ${Date.now()}` });
+  const socio = socios.find((s: { nombre: string }) => s.nombre.startsWith('Socio historia'));
+  const cliente = await pedir('/clientes', { nombre: 'Camilo Restrepo' });
+  const { prestamoId } = await pedir('/prestamos', {
+    clienteId: cliente.id,
+    capital: 1_000_000,
+    tasaMensualBp: 300,
+    fechaDesembolso: '2026-06-10',
+    plazoMeses: null,
+    socios: [{ socioId: socio.id, tasaBp: 300, aporteCapital: 1_000_000 }],
+  });
+
+  await page.goto(`/prestamos/${prestamoId}/pago`);
+  await expect(page.getByRole('heading', { name: 'Registrar pago' })).toBeVisible();
+
+  // Modo "pagos pasados": propone el corte más antiguo sin pagar y su cuota.
+  await page.getByRole('button', { name: 'Empezar por el corte del 10 jul 2026' }).click();
+  await expect(page.getByLabel('Fecha del pago')).toHaveValue('2026-07-10');
+  await expect(page.getByRole('textbox', { name: 'Monto recibido' })).toHaveValue('30.000');
+  await page.getByRole('button', { name: 'Guardar y registrar otro' }).click();
+  await expect(page.getByText('Guardado el pago de $ 30.000 del 10 jul 2026.')).toBeVisible();
+
+  // Sin salir de la pantalla, ya propone el corte siguiente.
+  await expect(page.getByLabel('Fecha del pago')).toHaveValue('2026-08-10');
+
+  // En ese pago el cliente entregó 90.000: su mes y dos meses adelantados.
+  await page.getByRole('textbox', { name: 'Monto recibido' }).fill('90000');
+  await expect(page.getByText('Abono a capital', { exact: true })).toBeVisible();
+  await page.getByText('Adelantar meses').click();
+  await expect(page.getByText('Interés del mes 2', { exact: true })).toBeVisible();
+  await expect(page.getByText('Interés del mes 3 (adelantado)')).toBeVisible();
+  await expect(page.getByText('Interés del mes 4 (adelantado)')).toBeVisible();
+  await expect(page.getByText('Abono a capital', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Confirmar pago de $ 90.000' }).click();
+
+  // Detalle: sigue debiendo todo el capital y el interés está pagado hasta el corte de octubre.
+  await expect(page.getByRole('heading', { name: 'Camilo Restrepo' })).toBeVisible();
+  await expect(page.getByText('Interés ya pagado hasta')).toBeVisible();
+  await expect(page.getByText('10 oct 2026', { exact: true })).toBeVisible();
+  await expect(page.getByText('Al día')).toBeVisible();
+  expect(errores).toEqual([]);
+});

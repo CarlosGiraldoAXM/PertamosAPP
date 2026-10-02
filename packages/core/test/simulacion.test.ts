@@ -65,9 +65,13 @@ describe('simulación aleatoria de préstamos', () => {
           const monto = r.siguiente() < 0.5
             ? Math.min(maximo, e.interesVencidoPendiente + r.entero(0, enCurso + 5_000))
             : r.entero(e.interesVencidoPendiente, maximo);
+          // Una de cada tres veces, el sobrante adelanta meses en vez de ir a capital.
+          const sobrante = r.siguiente() < 0.33 ? 'adelantar' : 'capital';
           if (monto > 0) {
-            const m = aplicarPago(p, libro, { fecha: hoy, monto }, hoy);
+            const m = aplicarPago(p, libro, { fecha: hoy, monto, sobrante }, hoy);
             expect(m.aplicaciones.reduce((s, a) => s + a.aInteres + a.aCapital, 0)).toBe(monto);
+            // Ningún mes se cobra por encima de su interés.
+            expect(m.aplicaciones.every((a) => a.aInteres >= 0 && a.aCapital >= 0)).toBe(true);
             registrar(m);
           }
         } else if (op < 0.68 && !e.cancelado) {

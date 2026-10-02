@@ -23,7 +23,8 @@ export interface MesDelEstado {
   interes: number;
   pagado: number;
   pendiente: number;
-  estado: 'pagado' | 'vencido' | 'curso';
+  /** 'adelantado': un mes que todavía no empezó y ya está pagado. */
+  estado: 'pagado' | 'adelantado' | 'vencido' | 'curso';
 }
 
 export interface EstadoDeCuenta {
@@ -41,6 +42,8 @@ export interface EstadoDeCuenta {
    * cumplido, ese pago incluye además todo el capital.
    */
   proximoPago: { fecha: string; monto: number; incluyeCapital: boolean } | null;
+  /** Si hay meses pagados por adelantado: fecha del último corte ya cubierto. */
+  interesPagadoHasta: string | null;
   /** Lo que costaría cancelar todo en `fecha`; null si ya está cancelado. */
   paraCancelarHoy: { interes: number; capital: number; total: number } | null;
   pagos: PagoDelEstado[];
@@ -88,7 +91,7 @@ export function armarEstadoDeCuenta(p: PrestamoConEstado, hoy: string): EstadoDe
       interes: per.interes,
       pagado: per.pagado,
       pendiente: per.pendiente,
-      estado: per.pendiente === 0 ? 'pagado' : per.vencido ? 'vencido' : 'curso',
+      estado: per.pendiente === 0 ? (per.fechaInicio >= hoy ? 'adelantado' : 'pagado') : per.vencido ? 'vencido' : 'curso',
     }));
 
   return {
@@ -114,6 +117,7 @@ export function armarEstadoDeCuenta(p: PrestamoConEstado, hoy: string): EstadoDe
           incluyeCapital: p.prestamo.plazoMeses !== null && e.proximoCorte.numero >= p.prestamo.plazoMeses,
         }
       : null,
+    interesPagadoHasta: e.interesPagadoHasta,
     paraCancelarHoy,
     pagos,
     meses,

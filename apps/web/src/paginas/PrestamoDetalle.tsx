@@ -128,6 +128,7 @@ export function PrestamoDetalle() {
                 <Cuota redondeada={e.aCobrarHoy.cuotaACobrar} exacta={e.aCobrarHoy.interesExacto} />
               </Fila>
             )}
+            {e.interesPagadoHasta && <Fila etiqueta="Interés ya pagado hasta">{fechaCorta(e.interesPagadoHasta)}</Fila>}
             {e.proximoCorte && (
               <Fila etiqueta={`Próximo corte · ${fechaCorta(e.proximoCorte.fecha)}`}>
                 <Cuota redondeada={e.proximoCorte.cuotaACobrar} exacta={e.proximoCorte.interesExacto} />

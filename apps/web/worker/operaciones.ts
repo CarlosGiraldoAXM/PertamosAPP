@@ -163,13 +163,15 @@ export async function registrarPago(db: D1Database, prestamoId: string, e: entra
   const fecha = entrada.fechaOpcional(e, 'fecha') ?? hoy;
   const monto = entrada.entero(e, 'monto');
   const simular = entrada.booleanoOpcional(e, 'simular') ?? false;
+  // Qué hacer con lo que sobre tras cubrir lo vencido y el mes en curso.
+  const sobrante = entrada.opcion(e, 'sobrante', ['capital', 'adelantar']);
   const datos = leerDatosPago(e);
 
   return serializado(async () => {
     const d = await cargarPrestamo(db, prestamoId);
     exigirActivo(d.fila);
     const { prestamo, movimientos } = aCore(d);
-    const movimiento = aplicarPago(prestamo, movimientos, { fecha, monto }, hoy);
+    const movimiento = aplicarPago(prestamo, movimientos, { fecha, monto, sobrante }, hoy);
     const estado = estadoPrestamo(prestamo, [...movimientos, { ...movimiento, id: 'nuevo' }], hoy);
     if (simular) return { simulado: true, movimiento, estado };
     const escrito = await escribirMovimiento(db, d.fila, movimientos.length + 1, movimiento, datos, estado);

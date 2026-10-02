@@ -102,6 +102,8 @@ export interface Libro {
   ultimaFecha: FechaISO | null;
   /** Período en el que se liquidó el préstamo, si se liquidó. */
   periodoLiquidado: number | null;
+  /** Último período que tiene interés pagado (puede ser futuro si hay meses adelantados); 0 si ninguno. */
+  ultimoPeriodoConPago: number;
   interesPagadoEn(periodo: number): Pesos;
   interesCobradoPor(socioId: string): Pesos;
   capitalDevueltoA(socioId: string): Pesos;
@@ -160,18 +162,21 @@ export function analizarLibro(prestamo: Prestamo, movimientos: readonly Movimien
     saldo: prestamo.capital - capitalPagado,
     ultimaFecha: efectivos.reduce<FechaISO | null>((u, m) => (u === null || m.fecha > u ? m.fecha : u), null),
     periodoLiquidado,
+    ultimoPeriodoConPago: [...porPeriodo].reduce((max, [periodo, pagado]) => (pagado > 0 && periodo > max ? periodo : max), 0),
     interesPagadoEn,
     interesCobradoPor: (socioId) => interesPorSocio.get(socioId) ?? 0,
     capitalDevueltoA: (socioId) => devueltoPorSocio.get(socioId) ?? 0,
     devueltoPorSocio,
     saldoAlCorte,
     interesDelPeriodo(k) {
-      if (periodoLiquidado !== null) {
-        // La liquidación cobra el período en curso prorrateado y cierra el préstamo.
-        if (k === periodoLiquidado) return interesPagadoEn(k);
-        if (k > periodoLiquidado) return 0;
-      }
-      return interesMensual(saldoAlCorte(k - 1), prestamo.tasaMensualBp);
+      const pagado = interesPagadoEn(k);
+      // La liquidación cobra el período en curso prorrateado y cierra el préstamo:
+      // desde ahí, cada período vale lo que ya se pagó por él (0, o lo adelantado).
+      if (periodoLiquidado !== null && k >= periodoLiquidado) return pagado;
+      // Un mes nunca vale menos que lo ya pagado por él: si se adelantó y después
+      // se abonó a capital, el mes adelantado queda como está y el abono baja el
+      // interés desde el primer mes sin pagar. No se devuelve interés.
+      return Math.max(interesMensual(saldoAlCorte(k - 1), prestamo.tasaMensualBp), pagado);
     },
   };
 }

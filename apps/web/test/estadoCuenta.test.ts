@@ -124,6 +124,25 @@ describe('armarEstadoDeCuenta', () => {
     expect(r.proximoPago).toEqual({ fecha: '2026-10-03', monto: 2_100_000, incluyeCapital: true });
   });
 
+  it('los meses adelantados aparecen como tales y el próximo pago es el primero sin pagar', () => {
+    // 10-may: corre el mes 1. 375.000 = tres meses de interés (125.000 c/u).
+    const adelantado: Movimiento[] = [
+      { ...aplicarPago(P, [], { fecha: '2026-05-10', monto: 375_000, sobrante: 'adelantar' }, '2026-05-10'), id: 'm1' },
+    ];
+    const r = armarEstadoDeCuenta(conEstado(completo(adelantado), '2026-05-20'), '2026-05-20');
+    expect(r.pagos).toEqual([
+      { fecha: '2026-05-10', tipo: 'pago', medio: 'Nequi', monto: 375_000, aInteres: 375_000, aCapital: 0, saldoDespues: 2_500_000 },
+    ]);
+    expect(r.meses.map((m) => [m.numero, m.estado])).toEqual([
+      [1, 'pagado'],
+      [2, 'adelantado'],
+      [3, 'adelantado'],
+    ]);
+    expect(r.interesPagadoHasta).toBe('2026-08-03');
+    expect(r.proximoPago).toEqual({ fecha: '2026-09-03', monto: 125_000, incluyeCapital: false });
+    expect(r.interesVencido).toBe(0);
+  });
+
   it('sin pagos: debe todo el capital y la lista de pagos está vacía', () => {
     const nuevo = armarEstadoDeCuenta(conEstado(completo([]), '2026-05-10'), '2026-05-10');
     expect(nuevo.pagos).toEqual([]);

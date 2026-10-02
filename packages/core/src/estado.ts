@@ -50,7 +50,10 @@ export interface EstadoFinanciero {
   diasAtraso: number;
   /** Lo que el cliente debe hoy (interés vencido). */
   aCobrarHoy: Cobro;
+  /** Primer corte futuro que todavía tiene interés por pagar (salta los meses adelantados). */
   proximoCorte: (Cobro & { numero: number; fecha: FechaISO }) | null;
+  /** Si hay meses pagados por adelantado: fecha del último corte ya cubierto. */
+  interesPagadoHasta: FechaISO | null;
   /** Hay plazo, ya pasó y queda capital. */
   plazoVencido: boolean;
   /** Cortes futuros desde `proximoCorte` (hasta el plazo, o el horizonte si no hay plazo). */
@@ -80,8 +83,9 @@ export function estadoPrestamo(
   const d = prestamo.fechaDesembolso;
   const k = periodoDeFecha(d, hoy);
 
+  // Hasta el período de hoy, más los meses futuros que ya estén pagados por adelantado.
   const periodos: ResumenPeriodo[] = [];
-  for (let j = 1; j <= k; j++) {
+  for (let j = 1; j <= Math.max(k, libro.ultimoPeriodoConPago); j++) {
     const interes = libro.interesDelPeriodo(j);
     const pagado = libro.interesPagadoEn(j);
     const corte = fechaCorte(d, j);
@@ -102,9 +106,15 @@ export function estadoPrestamo(
   const cancelado = libro.saldo === 0 && interesVencidoPendiente === 0;
 
   let proximoCorte: EstadoFinanciero['proximoCorte'] = null;
+  let interesPagadoHasta: FechaISO | null = null;
   let proyeccion: CorteProyectado[] = [];
   if (!cancelado && libro.saldo > 0) {
-    const p = fechaCorte(d, k) === hoy ? k + 1 : k;
+    // El primer corte que todavía no llegó…
+    const siguiente = fechaCorte(d, k) === hoy ? k + 1 : k;
+    // …y de ahí, el primero que aún debe algo: los meses ya pagados se saltan.
+    let p = siguiente;
+    while (p <= libro.ultimoPeriodoConPago && libro.interesDelPeriodo(p) <= libro.interesPagadoEn(p)) p++;
+    if (p > siguiente) interesPagadoHasta = fechaCorte(d, p - 1);
     const pendiente = Math.max(0, libro.interesDelPeriodo(p) - libro.interesPagadoEn(p));
     const cantidad = prestamo.plazoMeses !== null ? Math.max(1, prestamo.plazoMeses - p + 1) : (opciones.horizonteMeses ?? 12);
     proyeccion = proyectarCortes(prestamo, libro.saldo, p, cantidad, { interesPrimerCorte: pendiente });
@@ -139,6 +149,7 @@ export function estadoPrestamo(
     diasAtraso: atrasados.length > 0 ? diasEntre(atrasados[0]!.fechaCorte, hoy) : 0,
     aCobrarHoy: cobro(interesVencidoPendiente, libro.saldo),
     proximoCorte,
+    interesPagadoHasta,
     plazoVencido: prestamo.plazoMeses !== null && libro.saldo > 0 && fechaCorte(d, prestamo.plazoMeses) <= hoy,
     proyeccion,
     interesProyectado,
