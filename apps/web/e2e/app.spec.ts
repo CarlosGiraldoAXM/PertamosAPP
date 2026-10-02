@@ -264,10 +264,12 @@ test('informe para el socio: descarga el Excel con la misma estructura de la hoj
   await libro.xlsx.readFile(await archivo.path());
   const hoja = libro.getWorksheet('Hoja1')!;
   const fila = (n: number) => 'BCDEFGHIJKL'.split('').map((c) => hoja.getCell(`${c}${n}`).value);
-  expect(fila(1)).toEqual(['CLIENTE', 'VEHICULO', 'PLACA', 'PRESTAMO', 'ABONO A CAP', 'SALDO', 'FECHA DE PAGO', 'TASA INTERES', 'TOTAL INTERES', `MATEO ${marca}`, '%']);
+  expect(hoja.getImages()).toHaveLength(1); // el logo
+  expect(hoja.getCell('E2').value).toMatch(/^PAGOS [A-Z]+ \d{4}$/); // el título, junto al logo
+  expect(fila(6)).toEqual(['CLIENTE', 'VEHICULO', 'PLACA', 'PRESTAMO', 'ABONO A CAP', 'SALDO', 'FECHA DE PAGO', 'TASA INTERES', 'TOTAL INTERES', `MATEO ${marca}`, '%']);
 
   // La fila de este préstamo (la base de pruebas tiene otros de los tests anteriores).
-  let n = 2;
+  let n = 7;
   while (hoja.getCell(`B${n}`).value !== `INFORME ${marca}`) n++;
   const [, vehiculo, placa, prestamo, abono, saldo, fecha, tasa, interes, parte, pct] = fila(n);
   expect([vehiculo, placa, prestamo, abono, saldo]).toEqual(['SPARK BLANCO', 'DDD 444', 7_000_000, 3_000_000, 4_000_000]);
@@ -279,7 +281,7 @@ test('informe para el socio: descarga el Excel con la misma estructura de la hoj
   // TOTAL debajo de la última fila, y las observaciones en el recuadro combinado.
   let total = n;
   while (hoja.getCell(`F${total}`).value !== 'TOTAL') total++;
-  expect(hoja.getCell(`G${total}`).value).toMatchObject({ formula: `SUM(G2:G${total - 1})` });
+  expect(hoja.getCell(`G${total}`).value).toMatchObject({ formula: `SUM(G7:G${total - 1})` });
   expect(hoja.getCell(`B${total + 2}`).value).toBe('OBSERVACIONES: Entra un crédito en noviembre.');
   expect(hoja.getCell(`K${total + 7}`).isMerged).toBe(true);
   expect(errores).toEqual([]);

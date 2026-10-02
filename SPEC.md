@@ -200,6 +200,8 @@ Moneda: `$ 1.250.000`. Donde haya cuota redondeada se muestra al lado la exacta,
 
 **Estado de cuenta en PDF** (botón en el detalle del préstamo). Documento para el **cliente**: capital que debe hoy, capital abonado, interés pagado, interés atrasado, próximo pago, cuánto cuesta cancelar todo hoy, cada pago con su reparto entre interés y capital y el capital que quedó, y el mes a mes. **No incluye el reparto entre socios** (es interno) ni los pagos reversados. Los datos los arma `src/datos/estadoCuenta.ts` a partir de core (con tests); `src/lib/pdfEstadoCuenta.ts` solo los dibuja con jsPDF, que se carga bajo demanda. Va en dos pasos — generar y luego Compartir/Descargar — porque Safari solo deja abrir el menú de compartir como respuesta directa a un toque.
 
+**Marca.** El logo de Préstamos DM vive en `public/logo.png` (recortado al contenido) y `public/icono.png` (solo el carro, para la pestaña y el acceso directo). Aparece en la barra del Inicio, en el encabezado del PDF y arriba del Excel del socio; en el Excel la tabla empieza en la fila 6 para dejarle lugar junto al título. `src/lib/logo.ts` lo carga para los documentos; si no se puede cargar, el documento sale igual sin logo.
+
 Pendiente: login, y subir soportes (fotos de cédula y comprobantes) a R2.
 
 ## 12. Comandos

@@ -1,17 +1,21 @@
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { escribirPesos, pesos } from '../lib/formato.ts';
+import { RUTA_LOGO } from '../lib/logo.ts';
 
 export function Pantalla({
   titulo,
   subtitulo,
   volver,
   acciones,
+  conLogo = false,
   children,
 }: {
   titulo: string;
   subtitulo?: string | undefined;
   volver?: string;
+  /** Muestra el logo en la barra en lugar del título (que queda para lectores de pantalla). */
+  conLogo?: boolean;
   acciones?: ReactNode;
   children: ReactNode;
 }) {
@@ -30,10 +34,18 @@ export function Pantalla({
               ←
             </button>
           )}
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-lg font-semibold text-slate-900">{titulo}</h1>
-            {subtitulo && <p className="truncate text-sm text-slate-500">{subtitulo}</p>}
-          </div>
+          {conLogo ? (
+            <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+              <img src={RUTA_LOGO} alt="Préstamos DM" width={640} height={293} className="h-12 w-auto" />
+              <h1 className="sr-only">{titulo}</h1>
+              {subtitulo && <p className="truncate text-sm text-slate-500">{subtitulo}</p>}
+            </div>
+          ) : (
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-lg font-semibold text-slate-900">{titulo}</h1>
+              {subtitulo && <p className="truncate text-sm text-slate-500">{subtitulo}</p>}
+            </div>
+          )}
           {acciones}
         </div>
       </header>

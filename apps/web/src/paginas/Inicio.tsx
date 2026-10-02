@@ -78,7 +78,7 @@ export function Inicio() {
   const r = d?.r;
 
   return (
-    <Pantalla titulo="Inicio" subtitulo={`Hoy, ${fechaCorta(hoy)}`}>
+    <Pantalla titulo="Inicio" subtitulo={`Hoy, ${fechaCorta(hoy)}`} conLogo>
       {carga.cargando && !d && <Cargando />}
       {carga.error && <Aviso>{carga.error}</Aviso>}
       {d?.sinPrestamos && esAdmin && <PrimerosPasos haySocios={d.haySocios} hayClientes={d.hayClientes} />}

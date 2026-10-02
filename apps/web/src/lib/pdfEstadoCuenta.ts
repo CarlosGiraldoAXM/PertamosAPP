@@ -2,6 +2,7 @@
 // los datos ya armados por `armarEstadoDeCuenta`.
 import type { EstadoDeCuenta } from '../datos/estadoCuenta.ts';
 import { fechaCorta, pesos, porcentaje } from './formato.ts';
+import { cargarLogo } from './logo.ts';
 
 type Alineacion = 'left' | 'right';
 interface Columna {
@@ -21,7 +22,7 @@ const ESTADO_MES = { pagado: 'Pagado', adelantado: 'Adelantado', vencido: 'Pendi
 
 export async function generarPdfEstadoDeCuenta(ec: EstadoDeCuenta): Promise<Blob> {
   // Se carga solo al pedir el PDF, para no pesar en el arranque de la app.
-  const { jsPDF } = await import('jspdf');
+  const [{ jsPDF }, logo] = await Promise.all([import('jspdf'), cargarLogo()]);
   const doc = new jsPDF({ unit: 'mm', format: 'letter' });
   const ancho = doc.internal.pageSize.getWidth();
   const alto = doc.internal.pageSize.getHeight();
@@ -50,9 +51,14 @@ export async function generarPdfEstadoDeCuenta(ec: EstadoDeCuenta): Promise<Blob
   };
 
   // ------------------------------------------------------------ encabezado
-  texto('Estado de cuenta', MARGEN, y + 5, { tam: 18, negrita: true });
-  texto(`Fecha: ${fechaCorta(ec.fecha)}`, derecha, y + 5, { color: GRIS, alinear: 'right' });
-  y += 13;
+  // Logo a la izquierda; título y fecha a la derecha.
+  const ANCHO_LOGO = 44;
+  const altoLogo = logo ? (ANCHO_LOGO * logo.alto) / logo.ancho : 0;
+  // 'SLOW' = máxima compresión: sin ella el PDF pasa de 15 KB a más de 500 KB.
+  if (logo) doc.addImage(logo.bytes, 'PNG', MARGEN, y - 2, ANCHO_LOGO, altoLogo, 'logo', 'SLOW');
+  texto('Estado de cuenta', derecha, y + 6, { tam: 18, negrita: true, alinear: 'right' });
+  texto(`Fecha: ${fechaCorta(ec.fecha)}`, derecha, y + 12, { color: GRIS, alinear: 'right' });
+  y += Math.max(altoLogo + 4, 20);
   texto(ec.cliente.nombre, MARGEN, y, { tam: 12, negrita: true });
   if (ec.cliente.documento) texto(`C.C. ${ec.cliente.documento}`, derecha, y, { color: GRIS, alinear: 'right' });
   y += 6;
