@@ -30,7 +30,15 @@ export interface MesDelEstado {
 export interface EstadoDeCuenta {
   fecha: string;
   cliente: { nombre: string; documento: string | null };
-  prestamo: { capital: number; tasaMensualBp: number; fechaDesembolso: string; plazoMeses: number | null; cancelado: boolean };
+  prestamo: {
+    capital: number;
+    tasaMensualBp: number;
+    fechaDesembolso: string;
+    plazoMeses: number | null;
+    cancelado: boolean;
+    /** Si el préstamo se cargó como saldo de apertura: lo que se prestó originalmente. */
+    capitalOriginal: number | null;
+  };
   capitalPendiente: number;
   capitalAbonado: number;
   interesPagado: number;
@@ -103,6 +111,7 @@ export function armarEstadoDeCuenta(p: PrestamoConEstado, hoy: string): EstadoDe
       fechaDesembolso: p.prestamo.fechaDesembolso,
       plazoMeses: p.prestamo.plazoMeses,
       cancelado: e.cancelado,
+      capitalOriginal: p.fila.origen?.capital ?? null,
     },
     capitalPendiente: e.saldoCapital,
     capitalAbonado: e.capitalPagado,

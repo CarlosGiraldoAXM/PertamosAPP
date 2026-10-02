@@ -40,6 +40,7 @@ function prestamo(id: string, fechaDesembolso: string, pagos: [fecha: string, mo
       notas: null,
       vehiculo: null,
       placa: null,
+      origen: null,
       created_at: '',
       socios: [],
     },

@@ -40,6 +40,12 @@ export interface PrestamoFila {
   /** Garantía: el vehículo y su placa, como van en el informe para el socio. */
   vehiculo: string | null;
   placa: string | null;
+  /**
+   * Solo en préstamos traídos del registro anterior como saldo de apertura:
+   * cuánto se prestó originalmente y los abonos a capital hechos antes de
+   * cargarlo. Es referencia para los informes; el sistema calcula desde el saldo.
+   */
+  origen: { capital: number; abonos: number[] } | null;
   created_at: string;
   socios: { socio_id: string; tasa_bp: number; aporte_capital: number }[];
 }

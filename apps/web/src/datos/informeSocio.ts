@@ -10,7 +10,7 @@ export interface FilaInforme {
   cliente: string;
   vehiculo: string | null;
   placa: string | null;
-  /** Capital que se prestó. */
+  /** Capital que se prestó (el original, si el préstamo se cargó como saldo de apertura). */
   prestamo: number;
   /** Cada abono a capital, en el orden en que se hizo. */
   abonos: number[];
@@ -54,10 +54,15 @@ export function armarInformeSocio(cartera: PrestamoConEstado[], socio: Socio, ho
         cliente: p.fila.cliente_nombre,
         vehiculo: p.fila.vehiculo,
         placa: p.fila.placa,
-        prestamo: p.prestamo.capital,
-        abonos: analizarLibro(p.prestamo, p.movimientos)
-          .efectivos.map((m) => m.aplicaciones.reduce((s, a) => s + a.aCapital, 0))
-          .filter((abono) => abono > 0),
+        // En un saldo de apertura, lo que se prestó originalmente; si no, el capital del préstamo.
+        prestamo: p.fila.origen?.capital ?? p.prestamo.capital,
+        // Los abonos anteriores a la carga, seguidos de los registrados en el sistema.
+        abonos: [
+          ...(p.fila.origen?.abonos ?? []),
+          ...analizarLibro(p.prestamo, p.movimientos)
+            .efectivos.map((m) => m.aplicaciones.reduce((s, a) => s + a.aCapital, 0))
+            .filter((abono) => abono > 0),
+        ],
         saldo,
         fechaPago: p.estado.proximoCorte?.fecha ?? null,
         tasaBp: p.prestamo.tasaMensualBp,

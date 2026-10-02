@@ -106,7 +106,7 @@ export function PrestamoDetalle() {
   return (
     <Pantalla
       titulo={p?.fila.cliente_nombre ?? 'Préstamo'}
-      subtitulo={p ? `${pesos(p.prestamo.capital)} al ${porcentaje(p.prestamo.tasaMensualBp)} mensual` : undefined}
+      subtitulo={p ? `${pesos(p.fila.origen?.capital ?? p.prestamo.capital)} al ${porcentaje(p.prestamo.tasaMensualBp)} mensual` : undefined}
       volver={p ? `/clientes/${p.fila.cliente_id}` : '/prestamos'}
     >
       {carga.cargando && !carga.datos && <Cargando />}
@@ -118,7 +118,7 @@ export function PrestamoDetalle() {
             <div className="mb-3 flex items-center justify-between">
               <EtiquetaEstado p={p} />
               <span className="text-sm text-slate-500">
-                Desde {fechaCorta(p.prestamo.fechaDesembolso)}
+                {p.fila.origen ? 'Saldo cargado el' : 'Desde'} {fechaCorta(p.prestamo.fechaDesembolso)}
                 {p.prestamo.plazoMeses ? ` · ${p.prestamo.plazoMeses} meses` : ' · sin plazo'}
               </span>
             </div>

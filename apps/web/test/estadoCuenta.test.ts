@@ -31,6 +31,7 @@ function completo(movimientos: Movimiento[], estado: 'activo' | 'pagado' = 'acti
       notas: null,
       vehiculo: null,
       placa: null,
+      origen: null,
       created_at: '',
       socios: [],
     },

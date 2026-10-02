@@ -33,6 +33,13 @@ test('socios → cliente → préstamo con dos socios → pago → reverso → c
     await expect(page.getByText(nombre, { exact: true })).toBeVisible();
   }
 
+  // Corregir el nombre de un socio
+  await page.getByRole('button', { name: 'Editar' }).nth(1).click();
+  await page.getByLabel('Nombre de Socio B').fill('Socio Beta');
+  await page.getByRole('button', { name: 'Guardar' }).click();
+  await expect(page.getByText('Socio Beta', { exact: true })).toBeVisible();
+  await expect(page.getByText('Socio B', { exact: true })).toHaveCount(0);
+
   // Cliente
   await page.getByRole('link', { name: /Clientes/ }).click();
   await page.getByRole('button', { name: '+ Nuevo' }).click();

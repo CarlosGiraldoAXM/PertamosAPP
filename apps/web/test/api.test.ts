@@ -285,3 +285,22 @@ describe('vehículo y placa del préstamo', () => {
     expect((await pedir('PATCH', '/prestamos/30000000-0000-4000-8000-00000000ffff', { vehiculo: 'X' })).status).toBe(404);
   });
 });
+
+describe('socios y saldos de apertura', () => {
+  it('se le puede cambiar el nombre a un socio sin tocar sus préstamos', async () => {
+    const { prestamo, socioA } = await prestamoNuevo();
+    const r = await pedir('PATCH', `/socios/${socioA}`, { nombre: '  Nombre Corregido ' });
+    expect(r.status).toBe(200);
+    expect(r.cuerpo.find((s: { id: string }) => s.id === socioA)).toMatchObject({ nombre: 'Nombre Corregido', activo: true });
+    expect((await libro(prestamo)).fila.socios.map((s) => s.socio_id)).toContain(socioA);
+    expect((await pedir('PATCH', '/socios/10000000-0000-4000-8000-00000000ffff', { nombre: 'X' })).status).toBe(404);
+  });
+
+  it('un préstamo cargado como saldo de apertura trae su préstamo original y abonos anteriores', async () => {
+    const { prestamo } = await prestamoNuevo();
+    expect((await libro(prestamo)).fila.origen).toBeNull();
+    // Así los deja la carga desde la hoja (herramientas/importar-hoja.mjs).
+    await db.prepare('update prestamos set origen_capital = ?, origen_abonos = ? where id = ?').bind(21_000_000, '[5000000,4000000]', prestamo).run();
+    expect((await libro(prestamo)).fila.origen).toEqual({ capital: 21_000_000, abonos: [5_000_000, 4_000_000] });
+  });
+});

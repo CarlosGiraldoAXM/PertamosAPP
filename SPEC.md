@@ -130,6 +130,8 @@ Definido en `apps/web/migrations`. Tablas `STRICT` (SQLite rechaza valores de ot
 
 **Eliminación lógica de clientes.** `clientes.eliminado_en` (fecha y hora, o null). "Eliminar" un cliente solo pone esa marca: él, sus préstamos y sus pagos dejan de existir para la app porque el Worker filtra todas las lecturas (`CLIENTE_VIGENTE` / `PRESTAMO_VIGENTE` en `worker/repo.ts`), y por lo tanto también las operaciones (pagar, liquidar o reversar un préstamo oculto da 404) y los reportes. Nada se borra y el libro sigue intacto; se revierte con "Restaurar". La cédula de un cliente eliminado sigue ocupada: crear otro con la misma devuelve un error que indica restaurarlo.
 
+**Saldos de apertura.** Los préstamos que venían de la hoja de Excel se cargaron el 2026-10-02 como saldo de apertura: en el sistema el préstamo tiene como capital el **saldo** de ese día y como fecha de inicio su último día de pago (así nace al día y conserva su día de corte). `prestamos.origen_capital` y `prestamos.origen_abonos` (JSON) guardan, solo como referencia, el préstamo original y los abonos anteriores; el informe del socio los usa para las columnas PRESTAMO y ABONO A CAP, y el PDF del cliente dice "Préstamo original de … Saldo de … al …". En los préstamos creados en el sistema van en null. Consecuencia: el historial de pagos anterior a la carga no existe en el sistema.
+
 **Triggers: `BEGIN` y `END` en MAYÚSCULAS.** La API de consultas de D1, que es la que usa `wrangler d1 migrations apply --remote`, solo así reconoce el cuerpo de un trigger; en minúsculas lo corta en el primer `;` y falla con `incomplete input`. La base local los acepta en minúsculas, así que el error solo aparece en producción (por esto la migración 0002 estuvo sin aplicar hasta el 2026-10-01). Hay un test que lo vigila.
 
 **Concurrencia (reemplazo de `FOR UPDATE`).** Dos operaciones simultáneas sobre un préstamo leen N movimientos y ambas calculan el número N+1. La primera entra; la segunda choca, se descarta entera, y el Worker la reintenta leyendo el libro ya actualizado (hasta 3 veces). Hay una prueba que mete un pago justo entre la lectura y la escritura del Worker: sin el consecutivo, esa prueba falla con un doble cobro del mismo mes.
@@ -165,7 +167,7 @@ Límite conocido frente a Postgres: la fila de cierre la inserta el Worker; algu
 
 | Método y ruta | Qué hace |
 |---|---|
-| `GET /api/socios` · `POST` · `PATCH /:id` | Lista, crea, renombra o activa/desactiva socios |
+| `GET /api/socios` · `POST` · `PATCH /:id` | Lista, crea, renombra o activa/desactiva socios (desde Cuenta → Socios → Editar) |
 | `GET /api/clientes` · `GET /:id` · `POST` · `PATCH /:id` | Clientes vigentes |
 | `DELETE /api/clientes/:id` · `POST /:id/restaurar` · `GET /api/clientes?eliminados=1` | Eliminación lógica, restauración y lista de eliminados |
 | `GET /api/prestamos[?clienteId=]` · `GET /:id` | Préstamos con su libro completo (pagos → aplicaciones → reparto) |
@@ -217,6 +219,8 @@ Desde la raíz del repo:
 | `npm run typecheck` | Tipos de la app, el Worker y el motor |
 | `npm run db:migrar:remoto -w @prestamos/web` | Aplica las migraciones a la D1 de producción. **Va antes de subir código que dependa de una migración nueva**: el push a `main` publica solo y no migra |
 | `npm run deploy` | Compila y publica en Cloudflare (requiere `wrangler login` y haber decidido el acceso, §7) |
+
+Herramientas (`apps/web/herramientas`, no tocan ninguna base por sí solas): `importar-hoja.mjs` convierte la hoja "PAGOS <MES> <AÑO>.xlsx" en el SQL de saldos de apertura (reutiliza los socios que ya existan, por nombre, y avisa de lo que no cuadra dentro de la hoja); `comparar-informe.mjs` compara el informe generado por la app contra la hoja original. La hoja y el SQL tienen datos reales y viven en `docs/`, fuera de git.
 
 Reinicio de producción: el 2026-10-01 se vació la base (los datos eran de prueba) y se aplicaron las 4 migraciones; hay un respaldo previo en `docs/respaldos/` (carpeta fuera de git, igual que el Excel de referencia).
 

@@ -21,6 +21,7 @@ interface Caso {
   creado: string;
   pagos?: [fecha: string, monto: number][];
   liquidar?: string;
+  origen?: { capital: number; abonos: number[] };
 }
 
 function prestamo(c: Caso): PrestamoCompleto {
@@ -56,6 +57,7 @@ function prestamo(c: Caso): PrestamoCompleto {
       notas: null,
       vehiculo: c.vehiculo,
       placa: c.placa,
+      origen: c.origen ?? null,
       created_at: c.creado,
       socios: [],
     },
@@ -144,6 +146,29 @@ describe('armarInformeSocio', () => {
       [0, 0],
       [0, 0],
     ]);
+  });
+
+  it('un saldo de apertura muestra el préstamo original y los abonos anteriores, seguidos de los nuevos', () => {
+    // Se cargó con saldo 9.000.000 de un préstamo original de 21.000.000 con tres abonos previos;
+    // ya en el sistema, el cliente pagó el mes y abonó 1.000.000 más.
+    const apertura = prestamo({
+      id: 'ap',
+      cliente: 'SALDO DE APERTURA',
+      vehiculo: null,
+      placa: null,
+      capital: 9_000_000,
+      tasaBp: 300,
+      mateoBp: 200,
+      desembolso: '2026-08-20',
+      creado: '2026-08-20T10:00:00Z',
+      origen: { capital: 21_000_000, abonos: [5_000_000, 4_000_000, 3_000_000] },
+      pagos: [['2026-09-20', 270_000 + 1_000_000]],
+    });
+    const f = armarInformeSocio([conEstado(apertura, hoy)], MATEO, hoy).filas[0]!;
+    expect(f.prestamo).toBe(21_000_000);
+    expect(f.abonos).toEqual([5_000_000, 4_000_000, 3_000_000, 1_000_000]);
+    expect(f.saldo).toBe(8_000_000);
+    expect(f.totalInteres).toBe(240_000);
   });
 
   it('sin préstamos activos queda vacío', () => {

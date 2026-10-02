@@ -64,7 +64,10 @@ export async function generarPdfEstadoDeCuenta(ec: EstadoDeCuenta): Promise<Blob
   y += 6;
   const plazo = ec.prestamo.plazoMeses ? `plazo de ${ec.prestamo.plazoMeses} meses` : 'sin plazo fijo';
   texto(
-    `Préstamo de ${pesos(ec.prestamo.capital)} al ${porcentaje(ec.prestamo.tasaMensualBp)} mensual, entregado el ${fechaCorta(ec.prestamo.fechaDesembolso)}, ${plazo}.`,
+    ec.prestamo.capitalOriginal === null
+      ? `Préstamo de ${pesos(ec.prestamo.capital)} al ${porcentaje(ec.prestamo.tasaMensualBp)} mensual, entregado el ${fechaCorta(ec.prestamo.fechaDesembolso)}, ${plazo}.`
+      : // Saldo de apertura: la fecha es la del saldo, no la de entrega del préstamo.
+        `Préstamo original de ${pesos(ec.prestamo.capitalOriginal)} al ${porcentaje(ec.prestamo.tasaMensualBp)} mensual. Saldo de ${pesos(ec.prestamo.capital)} al ${fechaCorta(ec.prestamo.fechaDesembolso)}.`,
     MARGEN,
     y,
     { color: GRIS },

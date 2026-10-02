@@ -54,7 +54,7 @@ export async function cargarPrestamos(db: D1Database, filtro: Filtro = {}): Prom
 
   const [prestamos, socios, pagos, aplicaciones, repartos] = await db.batch([
     q(`select p.id, p.cliente_id, c.nombre as cliente_nombre, c.documento as cliente_documento, p.capital_inicial, p.tasa_mensual_bp, p.fecha_desembolso,
-              p.plazo_meses, p.estado, p.notas, p.vehiculo, p.placa, p.created_at
+              p.plazo_meses, p.estado, p.notas, p.vehiculo, p.placa, p.origen_capital, p.origen_abonos, p.created_at
        from prestamos p join clientes c on c.id = p.cliente_id ${donde}
        order by p.fecha_desembolso desc, p.id`),
     q(`select ps.prestamo_id, ps.socio_id, ps.tasa_bp, ps.aporte_capital
@@ -90,9 +90,11 @@ export async function cargarPrestamos(db: D1Database, filtro: Filtro = {}): Prom
   const aplicacionesPor = agrupar(aplicaciones!.results as FilaAplicacion[], 'pago_id');
   const repartosPor = agrupar(repartos!.results as FilaReparto[], 'aplicacion_id');
 
-  return (prestamos!.results as Omit<PrestamoFila, 'socios'>[]).map((p) => ({
+  type FilaPrestamo = Omit<PrestamoFila, 'socios' | 'origen'> & { origen_capital: number | null; origen_abonos: string | null };
+  return (prestamos!.results as FilaPrestamo[]).map(({ origen_capital, origen_abonos, ...p }) => ({
     fila: {
       ...p,
+      origen: origen_capital === null ? null : { capital: origen_capital, abonos: origen_abonos ? (JSON.parse(origen_abonos) as number[]) : [] },
       socios: (sociosPor.get(p.id) ?? []).map(({ socio_id, tasa_bp, aporte_capital }) => ({ socio_id, tasa_bp, aporte_capital })),
     },
     pagos: (pagosPor.get(p.id) ?? []).map((pago) => ({
