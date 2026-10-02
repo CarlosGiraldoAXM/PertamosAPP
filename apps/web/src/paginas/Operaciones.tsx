@@ -180,8 +180,8 @@ export function RegistrarPago() {
                 <div className="grid grid-cols-2 gap-2">
                   {(
                     [
-                      ['capital', 'Abonar a capital', 'Baja la deuda'],
-                      ['adelantar', 'Adelantar meses', 'Paga los meses siguientes'],
+                      ['capital', 'Todo a capital', 'Baja la deuda'],
+                      ['adelantar', 'Adelantar el próximo mes', 'Paga el mes siguiente; el resto a capital'],
                     ] as const
                   ).map(([valor, titulo, detalle]) => (
                     <label

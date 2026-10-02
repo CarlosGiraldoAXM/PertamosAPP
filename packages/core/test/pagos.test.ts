@@ -324,109 +324,111 @@ describe('libro inconsistente', () => {
   });
 });
 
-describe('adelantar el interés de los meses siguientes', () => {
-  // 10-feb: está corriendo el mes 1 (corta el 15-feb). Paga 90.000 = tres meses de interés.
-  const adelanto = aplicarPago(P, [], { fecha: '2026-02-10', monto: 90_000, sobrante: 'adelantar' }, '2026-02-10');
+describe('adelantar el próximo mes', () => {
+  const forma = (m: MovimientoNuevo) => m.aplicaciones.map((a) => [a.periodo, a.aInteres, a.aCapital]);
+
+  it('ejemplo del dueño: al día, interés de 25.000, entrega 150.000 → 25.000 al próximo mes y 125.000 a capital', () => {
+    const Q: Prestamo = { ...P, tasaMensualBp: 250, socios: [{ socioId: 'A', tasaBp: 250, aporteCapital: 1_000_000 }] };
+    // El mes 1 ya está pagado.
+    const alDia = registrar([], aplicarPago(Q, [], { fecha: '2026-02-10', monto: 25_000 }, '2026-02-10'));
+    const m = aplicarPago(Q, alDia, { fecha: '2026-02-12', monto: 150_000, sobrante: 'adelantar' }, '2026-02-12');
+    expect(forma(m)).toEqual([
+      [2, 25_000, 0],
+      [null, 0, 125_000],
+    ]);
+
+    const e = estadoPrestamo(Q, registrar(alDia, m), '2026-02-12');
+    expect(e.saldoCapital).toBe(875_000);
+    expect(e.interesPagadoHasta).toBe('2026-03-15');
+    // El mes 3 ya se calcula sobre 875.000: 21.875, que se cobra como 22.000.
+    expect(e.proximoCorte).toEqual({ numero: 3, fecha: '2026-04-15', interesExacto: 21_875, cuotaACobrar: 22_000 });
+  });
+
+  it('por defecto el sobrante va todo a capital', () => {
+    expect(forma(aplicarPago(P, [], { fecha: '2026-02-10', monto: 150_000 }, '2026-02-10'))).toEqual([
+      [1, 30_000, 0],
+      [null, 0, 120_000],
+    ]);
+  });
+
+  // 10-feb, sin pagos previos: corre el mes 1. Paga 150.000 adelantando.
+  const adelanto = aplicarPago(P, [], { fecha: '2026-02-10', monto: 150_000, sobrante: 'adelantar' }, '2026-02-10');
   const libro = registrar([], adelanto);
 
-  it('por defecto el sobrante sigue yendo a capital', () => {
-    const m = aplicarPago(P, [], { fecha: '2026-02-10', monto: 90_000 }, '2026-02-10');
-    expect(m.aplicaciones.map((a) => [a.periodo, a.aInteres, a.aCapital])).toEqual([
-      [1, 30_000, 0],
-      [null, 0, 60_000],
-    ]);
-  });
-
-  it('con "adelantar", el sobrante paga los meses siguientes en orden y no toca el capital', () => {
-    expect(adelanto.aplicaciones.map((a) => [a.periodo, a.aInteres, a.aCapital])).toEqual([
+  it('paga el mes en curso, adelanta UN solo mes y el resto va a capital', () => {
+    expect(forma(adelanto)).toEqual([
       [1, 30_000, 0],
       [2, 30_000, 0],
-      [3, 30_000, 0],
+      [null, 0, 90_000],
     ]);
-    // Cada mes adelantado se reparte entre socios igual que cualquier interés.
-    expect(adelanto.aplicaciones[2]!.reparto.map((r) => r.interes)).toEqual([10_000, 20_000]);
+    expect(adelanto.aplicaciones[1]!.reparto.map((r) => r.interes)).toEqual([10_000, 20_000]);
   });
 
-  it('el estado salta los meses adelantados: próximo corte el mes 4, sin atraso', () => {
+  it('el mes adelantado queda en lo que se pagó, aunque el mismo pago haya bajado el capital', () => {
     const e = estadoPrestamo(P, libro, '2026-02-20');
-    expect(e.saldoCapital).toBe(1_000_000);
-    expect(e.interesPagado).toBe(90_000);
-    expect(e.interesPagadoHasta).toBe('2026-04-15');
-    expect(e.proximoCorte).toEqual({ numero: 4, fecha: '2026-05-15', interesExacto: 30_000, cuotaACobrar: 30_000 });
-    expect(e.periodos.map((p) => [p.numero, p.pagado, p.pendiente, p.vencido])).toEqual([
-      [1, 30_000, 0, true],
-      [2, 30_000, 0, false],
-      [3, 30_000, 0, false],
-    ]);
-    // Dos meses después sigue al día; recién el mes 4 queda por pagar.
-    const despues = estadoPrestamo(P, libro, '2026-04-20');
-    expect(despues.interesVencidoPendiente).toBe(0);
-    expect(despues.interesPagadoHasta).toBeNull();
-    expect(despues.proximoCorte).toMatchObject({ numero: 4, interesExacto: 30_000 });
-    expect(estadoPrestamo(P, libro, '2026-05-20').interesVencidoPendiente).toBe(30_000);
-  });
-
-  it('si no alcanza para un mes entero, el siguiente queda pagado en parte', () => {
-    const m = aplicarPago(P, [], { fecha: '2026-02-10', monto: 70_000, sobrante: 'adelantar' }, '2026-02-10');
-    expect(m.aplicaciones.map((a) => [a.periodo, a.aInteres])).toEqual([
-      [1, 30_000],
-      [2, 30_000],
-      [3, 10_000],
-    ]);
-    const e = estadoPrestamo(P, registrar([], m), '2026-02-20');
+    expect(e.saldoCapital).toBe(910_000);
     expect(e.interesPagadoHasta).toBe('2026-03-15');
-    expect(e.proximoCorte).toMatchObject({ numero: 3, fecha: '2026-04-15', interesExacto: 20_000 });
-  });
-
-  it('un mes ya adelantado no se vuelve a cobrar: el siguiente adelanto sigue desde el primero sin pagar', () => {
-    const m = aplicarPago(P, libro, { fecha: '2026-02-20', monto: 60_000, sobrante: 'adelantar' }, '2026-02-20');
-    expect(m.aplicaciones.map((a) => [a.periodo, a.aInteres])).toEqual([
-      [4, 30_000],
-      [5, 30_000],
-    ]);
-  });
-
-  it('un abono a capital posterior no rebaja los meses ya adelantados: baja desde el primero sin pagar', () => {
-    // 20-feb: abona 500.000. Los meses 2 y 3 ya estaban pagados sobre 1.000.000.
-    const abono = aplicarPago(P, libro, { fecha: '2026-02-20', monto: 500_000 }, '2026-02-20');
-    expect(abono.aplicaciones.map((a) => [a.periodo, a.aCapital])).toEqual([[null, 500_000]]);
-    const e = estadoPrestamo(P, registrar(libro, abono), '2026-02-20');
-    expect(e.saldoCapital).toBe(500_000);
     expect(e.periodos.map((p) => [p.numero, p.interes, p.pagado, p.pendiente])).toEqual([
       [1, 30_000, 30_000, 0],
-      [2, 30_000, 30_000, 0],
-      [3, 30_000, 30_000, 0],
+      [2, 30_000, 30_000, 0], // no 27.300: ya estaba pagado
     ]);
-    // El mes 4 ya se calcula sobre 500.000.
-    expect(e.proximoCorte).toEqual({ numero: 4, fecha: '2026-05-15', interesExacto: 15_000, cuotaACobrar: 15_000 });
+    // El mes 3 sí baja: 3 % de 910.000 = 27.300, que se cobra como 28.000.
+    expect(e.proximoCorte).toEqual({ numero: 3, fecha: '2026-04-15', interesExacto: 27_300, cuotaACobrar: 28_000 });
+    expect(estadoPrestamo(P, libro, '2026-03-20').interesVencidoPendiente).toBe(0);
+    expect(estadoPrestamo(P, libro, '2026-04-20').interesVencidoPendiente).toBe(27_300);
   });
 
-  it('con plazo no se adelanta más allá del plazo: lo que quede va a capital', () => {
-    const C: Prestamo = { ...P, plazoMeses: 3 };
-    const m = aplicarPago(C, [], { fecha: '2026-02-10', monto: 150_000, sobrante: 'adelantar' }, '2026-02-10');
-    expect(m.aplicaciones.map((a) => [a.periodo, a.aInteres, a.aCapital])).toEqual([
-      [1, 30_000, 0],
-      [2, 30_000, 0],
-      [3, 30_000, 0],
-      [null, 0, 60_000],
+  it('mes a mes: el siguiente adelanto toma el mes que sigue al último pagado', () => {
+    const m = aplicarPago(P, libro, { fecha: '2026-02-20', monto: 50_000, sobrante: 'adelantar' }, '2026-02-20');
+    expect(forma(m)).toEqual([
+      [3, 27_300, 0],
+      [null, 0, 22_700],
     ]);
+  });
+
+  it('si no alcanza para el mes entero, queda pagado en parte y no hay abono a capital', () => {
+    const m = aplicarPago(P, [], { fecha: '2026-02-10', monto: 40_000, sobrante: 'adelantar' }, '2026-02-10');
+    expect(forma(m)).toEqual([
+      [1, 30_000, 0],
+      [2, 10_000, 0],
+    ]);
+    const e = estadoPrestamo(P, registrar([], m), '2026-02-20');
+    expect(e.interesPagadoHasta).toBeNull();
+    expect(e.proximoCorte).toMatchObject({ numero: 2, fecha: '2026-03-15', interesExacto: 20_000 });
+  });
+
+  it('con plazo no se adelanta más allá del plazo', () => {
+    const hasta1: Prestamo = { ...P, plazoMeses: 1 };
+    expect(forma(aplicarPago(hasta1, [], { fecha: '2026-02-10', monto: 150_000, sobrante: 'adelantar' }, '2026-02-10'))).toEqual([
+      [1, 30_000, 0],
+      [null, 0, 120_000],
+    ]);
+    const hasta3: Prestamo = { ...P, plazoMeses: 3 };
+    expect(forma(aplicarPago(hasta3, [], { fecha: '2026-02-10', monto: 150_000, sobrante: 'adelantar' }, '2026-02-10'))).toEqual(forma(adelanto));
   });
 
   it('adelantar exige primero ponerse al día con lo vencido', () => {
-    // 20-may sin haber pagado nada: vencidos los meses 1 a 4 (120.000).
+    // 20-may sin haber pagado nada: vencidos los meses 1 a 4 (120.000) y corre el 5.
     expect(codigo(() => aplicarPago(P, [], { fecha: '2026-05-20', monto: 100_000, sobrante: 'adelantar' }, '2026-05-20'))).toBe('PAGO_INSUFICIENTE');
-    const m = aplicarPago(P, [], { fecha: '2026-05-20', monto: 180_000, sobrante: 'adelantar' }, '2026-05-20');
-    expect(m.aplicaciones.map((a) => a.periodo)).toEqual([1, 2, 3, 4, 5, 6]);
+    const m = aplicarPago(P, [], { fecha: '2026-05-20', monto: 200_000, sobrante: 'adelantar' }, '2026-05-20');
+    expect(forma(m)).toEqual([
+      [1, 30_000, 0],
+      [2, 30_000, 0],
+      [3, 30_000, 0],
+      [4, 30_000, 0],
+      [5, 30_000, 0],
+      [6, 30_000, 0], // el único adelantado
+      [null, 0, 20_000],
+    ]);
   });
 
-  it('cancelar todo con meses adelantados cobra solo el capital y no devuelve el interés adelantado', () => {
+  it('cancelar todo con un mes adelantado cobra solo el capital y no devuelve el interés', () => {
     const c = cotizarLiquidacion(P, libro, '2026-02-20', '2026-02-20');
-    expect(c).toMatchObject({ interesVencido: 0, interesEnCurso: 0, capital: 1_000_000, total: 1_000_000 });
-    const fin = registrar(libro, aplicarLiquidacion(P, libro, '2026-02-20', '2026-02-20', 1_000_000));
+    expect(c).toMatchObject({ interesVencido: 0, interesEnCurso: 0, capital: 910_000, total: 910_000 });
+    const fin = registrar(libro, aplicarLiquidacion(P, libro, '2026-02-20', '2026-02-20', 910_000));
     const e = estadoPrestamo(P, fin, '2026-06-01');
     expect(e.cancelado).toBe(true);
-    expect(e.interesPagado).toBe(90_000);
-    expect(e.interesVencidoPendiente).toBe(0);
+    expect(e.interesPagado).toBe(60_000);
     expect(e.periodos.every((p) => p.pendiente === 0)).toBe(true);
   });
 

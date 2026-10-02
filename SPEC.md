@@ -84,11 +84,11 @@ Todo corre en **Cloudflare** (se migró desde Supabase el 2026-10-01).
 2. Interés del período en curso `k` completo (regla "mes completo"). Si no alcanza, queda parcial.
 3. El sobrante, según lo que se elija al registrar el pago (`sobrante`):
    - `capital` (por defecto): baja la deuda. Si excede el saldo → error (el cliente pagaría de más).
-   - `adelantar`: paga el interés de los meses siguientes, en orden, calculado sobre el saldo de hoy. Si no alcanza para un mes entero, ese mes queda pagado en parte. Con plazo no se adelanta más allá del plazo; lo que quede va a capital.
+   - `adelantar`: paga primero el interés del **próximo mes — uno solo**, el primero que todavía no esté pagado — y lo que quede baja la deuda. Ej.: al día, próximo interés 25.000, entrega 150.000 → 25.000 al mes siguiente y 125.000 a capital. Para adelantar otro mes se registra otro pago (mes a mes). Si no alcanza para el mes entero, queda pagado en parte. Con plazo no se adelanta más allá del plazo.
 
 El capital abonado reduce el interés a partir del período `k+1`.
 
-**Meses adelantados y abonos posteriores.** Un mes nunca vale menos que lo ya pagado por él: si el cliente adelantó meses y después abona a capital, los meses adelantados quedan como están y el abono baja el interés desde el primer mes sin pagar. No se devuelve interés (tampoco al cancelar todo). El estado salta los meses adelantados: `proximoCorte` es el primer corte futuro que aún debe algo e `interesPagadoHasta` indica hasta qué corte está cubierto.
+**Mes adelantado y abonos.** Un mes nunca vale menos que lo ya pagado por él: el mes adelantado se cobra sobre el saldo de antes del pago y queda como está aunque ese mismo pago, o uno posterior, abone a capital; el abono baja el interés desde el primer mes sin pagar. No se devuelve interés (tampoco al cancelar todo). El estado salta los meses adelantados: `proximoCorte` es el primer corte futuro que aún debe algo e `interesPagadoHasta` indica hasta qué corte está cubierto.
 
 Reglas adicionales:
 - Un pago hecho el mismo día de un corte paga ese mes (ya vencido); no adelanta el mes siguiente: el sobrante va a capital.

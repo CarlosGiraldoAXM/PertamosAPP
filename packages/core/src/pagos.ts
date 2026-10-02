@@ -12,8 +12,8 @@ export interface PagoEntrada {
   monto: Pesos;
   /**
    * 'capital' (por defecto): el sobrante baja la deuda.
-   * 'adelantar': el sobrante paga el interés de los meses siguientes, en orden;
-   * si alcanza a cubrir todos los meses hasta el plazo, lo que quede va a capital.
+   * 'adelantar': el sobrante paga primero el interés del PRÓXIMO mes (uno solo:
+   * el primero que todavía no esté pagado) y lo que quede baja la deuda.
    */
   sobrante?: DestinoSobrante;
 }
@@ -44,9 +44,6 @@ function aplicacionCapital(prestamo: Prestamo, libro: Libro, monto: Pesos): Apli
   return { periodo: null, aInteres: 0, aCapital: monto, reparto: repartirCapital(monto, prestamo.socios, libro.devueltoPorSocio) };
 }
 
-/** Tope de meses que un solo pago puede adelantar en un préstamo sin plazo. */
-const MAX_MESES_ADELANTADOS = 120;
-
 interface InteresPendiente {
   periodo: number;
   monto: Pesos;
@@ -71,7 +68,7 @@ function interesesPendientes(prestamo: Prestamo, libro: Libro, fecha: FechaISO):
 /**
  * Imputa un pago (SPEC §5.3): interés vencido del más antiguo al más nuevo,
  * interés del mes en curso completo, y el resto a capital o, si así se pide,
- * a adelantar el interés de los meses siguientes.
+ * a adelantar el interés del próximo mes antes de ir a capital.
  */
 export function aplicarPago(
   prestamo: Prestamo,
@@ -102,15 +99,15 @@ export function aplicarPago(
     resto -= monto;
   }
   if (resto > 0 && pago.sobrante === 'adelantar') {
-    // Meses siguientes al de la fecha del pago, sobre el saldo de hoy. Con plazo,
-    // no se adelanta más allá: ese corte ya exige el capital.
-    const k = periodoDeFecha(prestamo.fechaDesembolso, pago.fecha);
-    const ultimo = prestamo.plazoMeses ?? k + MAX_MESES_ADELANTADOS;
-    for (let j = k + 1; j <= ultimo && resto > 0; j++) {
-      const interes = libro.interesDelPeriodo(j);
-      if (interes === 0) break;
-      const monto = Math.min(resto, interes - libro.interesPagadoEn(j));
-      if (monto <= 0) continue;
+    // Un solo mes: el primero después del de la fecha del pago que no esté ya
+    // pagado. Su interés se calcula sobre el saldo de antes de este pago, y no
+    // se rebaja por el capital que se abone ahora (ver libro.interesDelPeriodo).
+    // Con plazo no se adelanta más allá: ese corte ya exige el capital.
+    let j = periodoDeFecha(prestamo.fechaDesembolso, pago.fecha) + 1;
+    while (j <= libro.ultimoPeriodoConPago && libro.interesDelPeriodo(j) <= libro.interesPagadoEn(j)) j++;
+    const pendiente = libro.interesDelPeriodo(j) - libro.interesPagadoEn(j);
+    if (pendiente > 0 && (prestamo.plazoMeses === null || j <= prestamo.plazoMeses)) {
+      const monto = Math.min(resto, pendiente);
       aplicaciones.push(aplicacionInteres(prestamo, j, monto));
       resto -= monto;
     }

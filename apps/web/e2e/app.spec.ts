@@ -122,7 +122,7 @@ test('una dirección interna abierta directamente carga la app (SPA)', async ({ 
   expect(errores).toEqual([]);
 });
 
-test('préstamo que ya venía corriendo: cargar pagos pasados y adelantar meses', async ({ page }) => {
+test('préstamo que ya venía corriendo: cargar pagos pasados y adelantar el próximo mes', async ({ page }) => {
   const errores = registrarErrores(page);
   // Préstamo de $1.000.000 al 3 % entregado el 10-jun-2026 (hace meses), creado por la API.
   const pedir = async (ruta: string, cuerpo: unknown) => (await page.request.post(`/api${ruta}`, { data: cuerpo })).json();
@@ -151,20 +151,20 @@ test('préstamo que ya venía corriendo: cargar pagos pasados y adelantar meses'
   // Sin salir de la pantalla, ya propone el corte siguiente.
   await expect(page.getByLabel('Fecha del pago')).toHaveValue('2026-08-10');
 
-  // En ese pago el cliente entregó 90.000: su mes y dos meses adelantados.
+  // En ese pago el cliente entregó 90.000: su mes, el mes siguiente adelantado y el resto a capital.
   await page.getByRole('textbox', { name: 'Monto recibido' }).fill('90000');
-  await expect(page.getByText('Abono a capital', { exact: true })).toBeVisible();
-  await page.getByText('Adelantar meses').click();
   await expect(page.getByText('Interés del mes 2', { exact: true })).toBeVisible();
+  await expect(page.getByText('$ 940.000')).toBeVisible(); // por defecto, los 60.000 que sobran van a capital
+  await page.getByText('Adelantar el próximo mes').click();
   await expect(page.getByText('Interés del mes 3 (adelantado)')).toBeVisible();
-  await expect(page.getByText('Interés del mes 4 (adelantado)')).toBeVisible();
-  await expect(page.getByText('Abono a capital', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Interés del mes 4 (adelantado)')).toHaveCount(0); // un solo mes
+  await expect(page.getByText('Abono a capital', { exact: true })).toBeVisible();
+  await expect(page.getByText('$ 970.000')).toBeVisible();
   await page.getByRole('button', { name: 'Confirmar pago de $ 90.000' }).click();
 
-  // Detalle: sigue debiendo todo el capital y el interés está pagado hasta el corte de octubre.
+  // Detalle: debe 970.000 y sigue al día (los cortes de agosto y septiembre quedaron pagados).
   await expect(page.getByRole('heading', { name: 'Camilo Restrepo' })).toBeVisible();
-  await expect(page.getByText('Interés ya pagado hasta')).toBeVisible();
-  await expect(page.getByText('10 oct 2026', { exact: true })).toBeVisible();
+  await expect(page.getByText('$ 970.000').first()).toBeVisible();
   await expect(page.getByText('Al día')).toBeVisible();
   expect(errores).toEqual([]);
 });

@@ -163,7 +163,8 @@ export async function registrarPago(db: D1Database, prestamoId: string, e: entra
   const fecha = entrada.fechaOpcional(e, 'fecha') ?? hoy;
   const monto = entrada.entero(e, 'monto');
   const simular = entrada.booleanoOpcional(e, 'simular') ?? false;
-  // Qué hacer con lo que sobre tras cubrir lo vencido y el mes en curso.
+  // Qué hacer con lo que sobre tras cubrir lo vencido y el mes en curso:
+  // todo a capital, o primero el interés del próximo mes y el resto a capital.
   const sobrante = entrada.opcion(e, 'sobrante', ['capital', 'adelantar']);
   const datos = leerDatosPago(e);
 
